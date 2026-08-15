@@ -1,0 +1,34 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # Not nix/setup: that action lives here, and bootstrapping the linters through the thing being linted would make a broken commit unfixable.
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Install devenv
+        run: nix profile add nixpkgs#devenv
+
+      - name: Lint
+        run: devenv shell -- just lint

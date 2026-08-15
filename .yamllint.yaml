@@ -1,0 +1,13 @@
+extends: default
+ignore:
+  - .devenv/
+  - .direnv/
+rules:
+  # Comments here are deliberately one sentence per line, which is regularly wider than any fixed limit.
+  line-length: disable
+  document-start: disable
+  # `on:` in a workflow is a boolean to YAML but a key to GitHub.
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1

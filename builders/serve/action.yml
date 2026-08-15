@@ -1,0 +1,25 @@
+name: Serve distributed builds
+description: >-
+  Builder side: wait to be claimed by the coordinator, then idle until it signals completion. The builder itself does nothing — Nix drives it over ssh-ng — so this step only keeps the runner alive.
+
+inputs:
+  claim-timeout-seconds:
+    description: How long to wait to be claimed before failing.
+    required: false
+    default: '600'
+
+  max-minutes:
+    description: >-
+      Hard cap on the idle wait. Exiting on our own terms lets the post steps run, which a cancelled job does not get to do.
+    required: false
+    default: '330'
+
+runs:
+  using: composite
+  steps:
+    - name: Serve distributed builds
+      shell: bash
+      env:
+        CLAIM_TIMEOUT_SECONDS: ${{ inputs.claim-timeout-seconds }}
+        MAX_MINUTES: ${{ inputs.max-minutes }}
+      run: ${{ github.action_path }}/serve.sh

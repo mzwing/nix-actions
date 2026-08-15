@@ -1,0 +1,45 @@
+name: Join CI tailnet
+description: >-
+  Join the CI tailnet via tailscale/github-action and restore the macOS runner's DNS afterwards (with DNS accepted, the tailscale action replaces the system DNS with quad100 and the runner loses public internet access; reset it back to DHCP).
+
+inputs:
+  oauth-client-id:
+    description: Tailscale OAuth client ID.
+    required: true
+
+  oauth-secret:
+    description: Tailscale OAuth client secret.
+    required: true
+
+  tags:
+    description: ACL tags for the node (e.g. tag:nix-ci-builder).
+    required: true
+
+  hostname:
+    description: Fixed hostname for the node.
+    required: true
+
+  args:
+    description: Additional arguments to `tailscale up` (e.g. "--ssh").
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Join tailnet
+      uses: tailscale/github-action@v4
+      env:
+        TAILSCALE_SSH_DEFAULT_PATH: /nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+      with:
+        oauth-client-id: ${{ inputs.oauth-client-id }}
+        oauth-secret: ${{ inputs.oauth-secret }}
+        tags: ${{ inputs.tags }}
+        hostname: ${{ inputs.hostname }}
+        args: ${{ inputs.args }}
+        version: latest
+
+    - name: Restore macOS runner DNS
+      if: runner.os == 'macOS'
+      shell: bash
+      run: sudo networksetup -setdnsservers Ethernet empty

@@ -1,0 +1,41 @@
+name: Connect to builder store cache
+description: >-
+  Point this machine at the run's Attic cache. Builders also install a post-build hook and an upload drainer; the coordinator configures the substituter side only.
+
+inputs:
+  cache-host:
+    description: Hostname of the store cache node on the tailnet.
+    required: true
+
+  cache-name:
+    description: Attic cache name.
+    required: false
+    default: builder
+
+  post-build-hook:
+    description: Whether to push locally built paths to Attic. "false" is substituter-only.
+    required: false
+    default: 'true'
+
+  timeout-seconds:
+    description: How long to wait for the cache to publish bootstrap data.
+    required: false
+    default: '300'
+
+  attic-nixpkgs-rev:
+    description: Pinned nixpkgs revision providing the prebuilt Attic client.
+    required: false
+    default: 2fcb964de67fcf60b43471c55d5d99e61a9ccb5a
+
+runs:
+  using: composite
+  steps:
+    - name: Connect to builder store cache
+      shell: bash
+      env:
+        CACHE_HOST: ${{ inputs.cache-host }}
+        CACHE_NAME: ${{ inputs.cache-name }}
+        POST_BUILD_HOOK: ${{ inputs.post-build-hook }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        ATTIC_NIXPKGS_REV: ${{ inputs.attic-nixpkgs-rev }}
+      run: ${{ github.action_path }}/connect.sh

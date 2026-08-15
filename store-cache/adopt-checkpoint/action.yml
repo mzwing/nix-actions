@@ -1,0 +1,24 @@
+name: Adopt builder store cache checkpoint
+description: >-
+  Prefer a restored mid-run checkpoint over the restored finalized generation. A checkpoint snapshots the generation it was restored from plus that run's pushes, and every successful final save purges the checkpoint family, so one that survives always postdates the newest finalized entry.
+
+inputs:
+  data-dir:
+    description: Live Attic data directory.
+    required: false
+    default: /nix/attic-data
+
+  checkpoint-dir:
+    description: Directory the checkpoint entry was restored into.
+    required: false
+    default: /nix/attic-checkpoint
+
+runs:
+  using: composite
+  steps:
+    - name: Adopt builder store cache checkpoint
+      shell: bash
+      env:
+        DATA_DIR: ${{ inputs.data-dir }}
+        CHECKPOINT_DIR: ${{ inputs.checkpoint-dir }}
+      run: ${{ github.action_path }}/adopt-checkpoint.sh

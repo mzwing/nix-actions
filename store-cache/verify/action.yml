@@ -1,0 +1,45 @@
+name: Verify builder store cache reachability
+description: >-
+  Fail fast unless the Attic HTTP cache answers both from the coordinator and from a builder. Nix can remember a failed substituter for the rest of a session and the cache job joins the tailnet in parallel, so this has to pass before any build starts.
+
+inputs:
+  cache-host:
+    description: Hostname of the store cache node on the tailnet.
+    required: true
+
+  cache-name:
+    description: Attic cache name.
+    required: false
+    default: builder
+
+  cache-port:
+    description: Attic HTTP port.
+    required: false
+    default: '8080'
+
+  builders-json:
+    description: 'Builder matrix JSON ({"include": [{"id", ...}, ...]}).'
+    required: true
+
+  builder-prefix:
+    description: Hostname prefix of the builders (e.g. nix-b-<run_id>-<attempt>).
+    required: true
+
+  timeout-seconds:
+    description: How long to keep probing before failing.
+    required: false
+    default: '180'
+
+runs:
+  using: composite
+  steps:
+    - name: Verify builder store cache reachability
+      shell: bash
+      env:
+        CACHE_HOST: ${{ inputs.cache-host }}
+        CACHE_NAME: ${{ inputs.cache-name }}
+        CACHE_PORT: ${{ inputs.cache-port }}
+        BUILDERS_JSON: ${{ inputs.builders-json }}
+        BUILDER_PREFIX: ${{ inputs.builder-prefix }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+      run: ${{ github.action_path }}/verify.sh

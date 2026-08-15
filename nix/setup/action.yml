@@ -1,0 +1,78 @@
+name: Set up Nix
+description: >-
+  Install Nix with the shared substituter configuration, optionally configure Cachix for pulls and install devenv.
+
+inputs:
+  github-token:
+    description: >-
+      GitHub token for `access-tokens` (private flake inputs). Leave empty to skip.
+    required: false
+    default: ''
+
+  substituter-set:
+    description: >-
+      Which shared substituters to configure. "essential" keeps only the caches that realistically serve a build, so a cache miss costs one narinfo round trip instead of five — worth it on builders, where a cold Rust graph misses thousands of times.
+    required: false
+    default: all
+
+  extra-substituters:
+    description: Additional substituters (space-separated), appended to the shared list.
+    required: false
+    default: ''
+
+  extra-trusted-public-keys:
+    description: Additional trusted public keys (space-separated), appended to the shared list.
+    required: false
+    default: ''
+
+  max-jobs:
+    description: >-
+      Value for the max-jobs nix setting (e.g. "0" on coordinators). Leave empty to skip.
+    required: false
+    default: ''
+
+  cachix-name:
+    description: Cachix cache name to configure for pulls.
+    required: false
+    default: mzwing
+
+  cachix-pull:
+    description: Whether to configure Cachix for pulls (skipPush).
+    required: false
+    default: 'true'
+
+  install-devenv:
+    description: Whether to install devenv into the nix profile.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Assemble Nix configuration
+      id: nix-config
+      shell: bash
+      env:
+        GITHUB_TOKEN_INPUT: ${{ inputs.github-token }}
+        EXTRA_SUBSTITUTERS: ${{ inputs.extra-substituters }}
+        EXTRA_TRUSTED_PUBLIC_KEYS: ${{ inputs.extra-trusted-public-keys }}
+        MAX_JOBS: ${{ inputs.max-jobs }}
+        SUBSTITUTER_SET: ${{ inputs.substituter-set }}
+      run: ${{ github.action_path }}/assemble-nix-config.sh
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: ${{ steps.nix-config.outputs.extra_nix_config }}
+
+    - name: Configure Cachix for pulls
+      if: inputs.cachix-pull == 'true'
+      uses: cachix/cachix-action@v17
+      with:
+        name: ${{ inputs.cachix-name }}
+        skipPush: true
+
+    - name: Install devenv
+      if: inputs.install-devenv == 'true'
+      shell: bash
+      run: nix profile add nixpkgs#devenv

@@ -1,0 +1,77 @@
+name: Reconcile builder store cache
+description: >-
+  Close the persistence gap left by the best-effort post-build hook. Computes the current-lock retention set and the exact scheduled transfer set, finds the required outputs on the still-live builders, and has Attic pull in whatever it is missing. Run after the builds and the Cachix push, before releasing the builders.
+
+inputs:
+  builders-json:
+    description: 'Builder matrix JSON ({"include": [{"id", ...}, ...]}).'
+    required: true
+
+  builder-prefix:
+    description: Hostname prefix of the builders (e.g. nix-b-<run_id>-<attempt>).
+    required: true
+
+  cache-host:
+    description: Hostname of the Attic cache node on the tailnet.
+    required: true
+
+  cache-name:
+    description: Attic cache name configured on every builder.
+    required: false
+    default: builder
+
+  cache-data-dir:
+    description: Attic data directory on the cache host.
+    required: false
+    default: /nix/attic-data
+
+  drvs-file:
+    description: Nix file evaluating to every current .drv path to retain.
+    required: false
+    default: ci/drvs.nix
+
+  active-drvs-file:
+    description: >-
+      Top-level .drv paths actually scheduled in this run. Must exist; may be empty when only extra outputs are active.
+    required: false
+    default: /tmp/active-drvs.txt
+
+  public-paths-file:
+    description: Paths already published to a public cache; neither uploaded nor kept privately.
+    required: false
+    default: /tmp/push-outputs.txt
+
+  extra-paths-file:
+    description: >-
+      Realised outputs without a static derivation path (devenv outputs, for example) to include in reconciliation and retention.
+    required: false
+    default: ''
+
+  transfer-jobs:
+    description: Concurrent Attic uploads per builder.
+    required: false
+    default: '6'
+
+  transfer-timeout-minutes:
+    description: Cap on a single builder's probe-and-upload pipeline.
+    required: false
+    default: '60'
+
+runs:
+  using: composite
+  steps:
+    - name: Reconcile builder store cache
+      shell: bash
+      env:
+        BUILDERS_JSON: ${{ inputs.builders-json }}
+        BUILDER_PREFIX: ${{ inputs.builder-prefix }}
+        CACHE_HOST: ${{ inputs.cache-host }}
+        CACHE_NAME: ${{ inputs.cache-name }}
+        CACHE_DATA_DIR: ${{ inputs.cache-data-dir }}
+        DRVS_FILE: ${{ inputs.drvs-file }}
+        ACTIVE_DRVS_FILE: ${{ inputs.active-drvs-file }}
+        PUBLIC_PATHS_FILE: ${{ inputs.public-paths-file }}
+        EXTRA_PATHS_FILE: ${{ inputs.extra-paths-file }}
+        TRANSFER_JOBS: ${{ inputs.transfer-jobs }}
+        TRANSFER_TIMEOUT_MINUTES: ${{ inputs.transfer-timeout-minutes }}
+      run: ${{ github.action_path }}/reconcile.sh

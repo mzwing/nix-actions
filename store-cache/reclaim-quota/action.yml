@@ -1,0 +1,18 @@
+name: Reclaim Actions cache quota
+description: >-
+  Delete the existing builder store cache entries so the save that follows has room. GitHub allows 10 GiB per repository and evicts by least recent use once that is exceeded, while a full Attic generation is ~8.5 GiB — so a save landing beside the previous generation transiently needs ~17 GiB and GitHub silently drops whatever is oldest, which in practice is the finalized generation and the evaluation store cache. cache-nix-action purges only after its own upload, which is exactly too late.
+
+inputs:
+  key-prefix:
+    description: Cache key prefix covering the family to clear.
+    required: false
+    default: nix-builder-attic
+
+runs:
+  using: composite
+  steps:
+    - name: Reclaim Actions cache quota
+      shell: bash
+      env:
+        KEY_PREFIX: ${{ inputs.key-prefix }}
+      run: ${{ github.action_path }}/reclaim-quota.sh

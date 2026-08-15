@@ -1,0 +1,36 @@
+name: Push store closure to Cachix
+description: >-
+  Push a set of final output paths to Cachix. Remote builds copy back only the outputs, while `cachix push` needs every closure path locally to be able to upload it, so missing runtime dependencies are substituted from the upstream caches (and the builder store cache) first — iterating, because the references of a path become known only once the path itself has been realised. `cachix push` always uploads the runtime closure of the given paths, so runtime dependencies that are not already present in the cache are uploaded the first time. Requires CACHIX_AUTH_TOKEN in the environment.
+
+inputs:
+  cachix-name:
+    description: Cachix cache name to push to.
+    required: true
+
+  paths-file:
+    description: File with one store path per line to push.
+    required: true
+
+  root-prefix:
+    description: >-
+      Prefix for the temporary GC roots keeping the realised closure alive between realise and push.
+    required: false
+    default: /tmp/ci-push-root
+
+  closure-paths-file:
+    description: >-
+      Optional file to atomically write with the complete closure after a successful Cachix push. Left absent when pushing fails.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Push outputs to Cachix
+      shell: bash
+      env:
+        CACHE_NAME: ${{ inputs.cachix-name }}
+        PATHS_FILE: ${{ inputs.paths-file }}
+        ROOT_PREFIX: ${{ inputs.root-prefix }}
+        CLOSURE_PATHS_FILE: ${{ inputs.closure-paths-file }}
+      run: ${{ github.action_path }}/push.sh

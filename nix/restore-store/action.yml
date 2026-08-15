@@ -1,0 +1,57 @@
+name: Restore Nix store
+description: >-
+  Restore the Nix store from the GitHub Actions cache (saved again post-run), then remove stale root-owned lock files left behind by interrupted builds or substitutions of earlier runs. The lock files ride along in the restored store cache and break the unprivileged tar of the post-run store save; no nix process is running at this point, so any lock file present is stale by definition.
+
+inputs:
+  primary-key:
+    description: Primary cache key for the store cache entry.
+    required: true
+
+  restore-prefix:
+    description: Restore prefix (restore-prefixes-first-match).
+    required: true
+
+  gc-max-store-size-linux:
+    description: Maximum store size before the cache is garbage-collected (Linux).
+    required: false
+    default: 2G
+
+  purge:
+    description: >-
+      Whether to purge stale caches in the post (save) phase. The calling job needs `actions: write` permission.
+    required: false
+    default: 'true'
+
+  purge-prefixes:
+    description: Cache key prefixes selected for purging. Empty defaults to `restore-prefix`.
+    required: false
+    default: ''
+
+  purge-last-accessed:
+    description: >-
+      Purge selected caches last accessed longer ago than this ISO 8601 duration (e.g. P1D).
+    required: false
+    default: P1D
+
+  purge-primary-key:
+    description: Whether to also purge the primary-key cache itself (always/never).
+    required: false
+    default: never
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Nix store
+      uses: nix-community/cache-nix-action@v7
+      with:
+        primary-key: ${{ inputs.primary-key }}
+        restore-prefixes-first-match: ${{ inputs.restore-prefix }}
+        gc-max-store-size-linux: ${{ inputs.gc-max-store-size-linux }}
+        purge: ${{ inputs.purge }}
+        purge-prefixes: ${{ inputs.purge-prefixes != '' && inputs.purge-prefixes || inputs.restore-prefix }}
+        purge-last-accessed: ${{ inputs.purge-last-accessed }}
+        purge-primary-key: ${{ inputs.purge-primary-key }}
+
+    - name: Remove stale Nix store lock files
+      shell: bash
+      run: sudo find /nix/store -maxdepth 1 -name '*.lock' -delete

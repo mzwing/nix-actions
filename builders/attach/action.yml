@@ -1,0 +1,33 @@
+name: Attach remote builders
+description: >-
+  Coordinator side: write the builder ssh config, wait for every builder in the matrix to become reachable, claim it, register it in /etc/nix/machines and point nix at the machines file.
+
+inputs:
+  builders-json:
+    description: 'Builder matrix JSON ({"include": [{"id", "runner", "system", "maxJobs"}, ...]}).'
+    required: true
+
+  builder-prefix:
+    description: Hostname prefix of the builders (e.g. nix-b-<run_id>-<attempt>).
+    required: true
+
+  ssh-host-pattern:
+    description: Host pattern(s) for the builder ssh config (e.g. "nur-b-* nur-cache-*").
+    required: true
+
+  timeout-seconds:
+    description: How long to wait for the fleet to come up.
+    required: false
+    default: '600'
+
+runs:
+  using: composite
+  steps:
+    - name: Attach remote builders
+      shell: bash
+      env:
+        BUILDERS_JSON: ${{ inputs.builders-json }}
+        BUILDER_PREFIX: ${{ inputs.builder-prefix }}
+        SSH_HOST_PATTERN: ${{ inputs.ssh-host-pattern }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+      run: ${{ github.action_path }}/attach.sh

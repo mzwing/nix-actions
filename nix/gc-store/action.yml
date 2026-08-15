@@ -1,0 +1,30 @@
+name: Garbage-collect store to build closure
+description: >-
+  Keep only store paths related to the current lock: register the build-time closure of the given derivations (plus optional extra paths) as GC roots, then collect everything else — stale intermediates from previous locks.
+
+inputs:
+  drvs-file:
+    description: Nix file evaluating to a JSON list of .drv paths.
+    required: false
+    default: ci/drvs.nix
+
+  extra-paths-json:
+    description: >-
+      Optional JSON value whose nested strings are additional paths to root (e.g. a map of devenv shell outputs, for targets whose drvs cannot be evaluated on this machine).
+    required: false
+    default: ''
+
+  gcroots-name:
+    description: Directory name under /nix/var/nix/gcroots for the roots.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Garbage-collect stale store paths
+      shell: bash
+      env:
+        DRVS_FILE: ${{ inputs.drvs-file }}
+        EXTRA_PATHS_JSON: ${{ inputs.extra-paths-json }}
+        GCROOTS_NAME: ${{ inputs.gcroots-name }}
+      run: ${{ github.action_path }}/gc-store.sh

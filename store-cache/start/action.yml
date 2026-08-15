@@ -1,0 +1,42 @@
+name: Start builder store cache
+description: >-
+  Start the run's Attic binary cache and return, leaving atticd in the background. Pairs with store-cache/finalize, which waits for the coordinator, prunes and shuts down. Splitting the lifecycle lets the job snapshot mid-run checkpoints while the server is live.
+
+inputs:
+  cache-host:
+    description: Tailnet hostname clients use for the Attic endpoint.
+    required: true
+
+  cache-name:
+    description: Attic cache name.
+    required: false
+    default: builder
+
+  data-dir:
+    description: Directory persisted by GitHub Actions Cache.
+    required: false
+    default: /nix/attic-data
+
+  port:
+    description: Attic HTTP port on the tailnet.
+    required: false
+    default: '8080'
+
+  attic-nixpkgs-rev:
+    description: Pinned nixpkgs revision providing prebuilt Attic tools.
+    required: false
+    default: 2fcb964de67fcf60b43471c55d5d99e61a9ccb5a
+
+runs:
+  using: composite
+  steps:
+    - name: Start Attic
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        CACHE_HOST: ${{ inputs.cache-host }}
+        CACHE_NAME: ${{ inputs.cache-name }}
+        DATA_DIR: ${{ inputs.data-dir }}
+        PORT: ${{ inputs.port }}
+        ATTIC_NIXPKGS_REV: ${{ inputs.attic-nixpkgs-rev }}
+      run: ${{ github.action_path }}/start.sh

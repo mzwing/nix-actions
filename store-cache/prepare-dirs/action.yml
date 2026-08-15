@@ -1,0 +1,30 @@
+name: Prepare builder store cache directories
+description: >-
+  Create the Attic subtree on the cache runner and relocate the runner temp directory into the big /nix pool. Must run before any cache action touches those paths.
+
+inputs:
+  data-dir:
+    description: Live Attic data directory.
+    required: false
+    default: /nix/attic-data
+
+  checkpoint-dir:
+    description: Staging directory for mid-run snapshots.
+    required: false
+    default: /nix/attic-checkpoint
+
+  temp-dir:
+    description: Replacement location for the runner temp directory.
+    required: false
+    default: /nix/attic-cache-tmp
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare builder store cache directories
+      shell: bash
+      env:
+        DATA_DIR: ${{ inputs.data-dir }}
+        CHECKPOINT_DIR: ${{ inputs.checkpoint-dir }}
+        TEMP_DIR: ${{ inputs.temp-dir }}
+      run: ${{ github.action_path }}/prepare-dirs.sh

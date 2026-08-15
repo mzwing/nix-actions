@@ -1,0 +1,32 @@
+listen = "[::]:@PORT@"
+allowed-hosts = []
+api-endpoint = "@API_ENDPOINT@"
+substituter-endpoint = "@API_ENDPOINT@"
+soft-delete-caches = false
+require-proof-of-possession = false
+
+[database]
+url = "sqlite://@DATA_DIR@/server.db?mode=rwc"
+
+[storage]
+type = "local"
+path = "@DATA_DIR@/storage"
+
+[chunking]
+# Store crate-scale NARs whole. Content-defined chunking costs a zstd pass, a hash and a SQLite row per 64K chunk (~30 rows for a 2 MiB crate output), capping the single server at 1-2 paths/s under load.
+# A 1 TiB threshold disables it for every realistic NAR; cross-NAR dedupe is worthless for mostly-unique build outputs, and identical NARs still dedupe by NAR hash.
+nar-size-threshold = 1099511627776
+min-size = 1048576
+avg-size = 4194304
+max-size = 16777216
+
+[compression]
+type = "zstd"
+level = 3
+
+[garbage-collection]
+interval = "0 seconds"
+default-retention-period = "0 seconds"
+
+[jwt.signing]
+token-hs256-secret-base64 = "@JWT_SECRET@"

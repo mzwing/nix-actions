@@ -1,0 +1,23 @@
+name: Pin tailnet peer address
+description: >-
+  Discover a tailnet peer's IP from the local tailscaled and pin it in /etc/hosts. Needed on runners where MagicDNS is unavailable — e.g. macOS, where the join action restores the system DNS to DHCP after joining (which also drops MagicDNS); Linux runners resolve tailnet hostnames via split DNS instead.
+
+inputs:
+  hostname:
+    description: Tailnet hostname of the peer to pin.
+    required: true
+
+  timeout-seconds:
+    description: How long to wait for the peer to appear in the netmap.
+    required: false
+    default: '180'
+
+runs:
+  using: composite
+  steps:
+    - name: Pin tailnet peer address
+      shell: bash
+      env:
+        PEER_HOSTNAME: ${{ inputs.hostname }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+      run: ${{ github.action_path }}/pin-peer.sh

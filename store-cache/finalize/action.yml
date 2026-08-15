@@ -1,0 +1,32 @@
+name: Finalize builder store cache
+description: >-
+  Wait for the coordinator, prune the Attic generation against reconciliation's keep-set, drop objects that became publicly available, reap orphan NARs, verify the database and stop atticd. Emits save-ready only once the persisted data is internally consistent.
+
+outputs:
+  save-ready:
+    description: Whether Attic shut down, pruned and passed its integrity checks.
+    value: ${{ steps.attic.outputs.save-ready }}
+
+inputs:
+  data-dir:
+    description: Directory persisted by GitHub Actions Cache.
+    required: false
+    default: /nix/attic-data
+
+  deadline-minutes:
+    description: >-
+      How long to wait for the coordinator. Must fit inside the job's own timeout with room for the save that follows.
+    required: false
+    default: '90'
+
+runs:
+  using: composite
+  steps:
+    - name: Finalize Attic
+      id: attic
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        DATA_DIR: ${{ inputs.data-dir }}
+        DEADLINE_MINUTES: ${{ inputs.deadline-minutes }}
+      run: ${{ github.action_path }}/finalize.sh

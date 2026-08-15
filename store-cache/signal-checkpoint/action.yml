@@ -1,0 +1,17 @@
+name: Signal builder store cache checkpoint
+description: >-
+  Ask the cache host to stage a mid-run snapshot, so even a run that later fails or is cancelled leaves a warm generation behind. Best effort: a missed checkpoint costs cache warmth, never correctness.
+
+inputs:
+  cache-host:
+    description: Hostname of the store cache node on the tailnet.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Signal builder store cache checkpoint
+      shell: bash
+      env:
+        CACHE_HOST: ${{ inputs.cache-host }}
+      run: ${{ github.action_path }}/signal.sh
