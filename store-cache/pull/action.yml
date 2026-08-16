@@ -1,0 +1,47 @@
+name: Pull builder store cache
+description: >-
+  Fetch the persisted Attic generation from an rclone remote into the live data directory. Replaces a GitHub Actions Cache restore, which caps the whole repository at 10 GiB and evicts by least recent use.
+
+outputs:
+  pulled:
+    description: Whether an existing generation was found and restored.
+    value: ${{ steps.pull.outputs.pulled }}
+
+inputs:
+  remote:
+    description: 'rclone destination holding the generation, e.g. onedrive:nix-ci/attic.'
+    required: true
+
+  data-dir:
+    description: Live Attic data directory.
+    required: false
+    default: /nix/attic-data
+
+  transfers:
+    description: Concurrent object transfers. The storage tree is tens of thousands of small files, so this dominates wall time.
+    required: false
+    default: '24'
+
+  timeout-minutes:
+    description: Cap on the whole pull.
+    required: false
+    default: '60'
+
+  rclone-nixpkgs-rev:
+    description: Pinned nixpkgs revision providing a prebuilt rclone.
+    required: false
+    default: 2fcb964de67fcf60b43471c55d5d99e61a9ccb5a
+
+runs:
+  using: composite
+  steps:
+    - name: Pull builder store cache
+      id: pull
+      shell: bash
+      env:
+        REMOTE: ${{ inputs.remote }}
+        DATA_DIR: ${{ inputs.data-dir }}
+        RCLONE_TRANSFERS: ${{ inputs.transfers }}
+        RCLONE_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        RCLONE_NIXPKGS_REV: ${{ inputs.rclone-nixpkgs-rev }}
+      run: bash ${{ github.action_path }}/pull.sh

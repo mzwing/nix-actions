@@ -17,6 +17,12 @@ if [[ -e /tmp/cache_done ]] || ! attic_running; then
   exit 0
 fi
 
+if [[ "${STAGE}" != 'true' ]]; then
+  notice 'Signalled; the caller persists the live directory itself.'
+  emit_output checkpoint-ready true
+  exit 0
+fi
+
 count="$(attic_object_count "${DATA_DIR}/server.db")"
 previous="$(cat "${ATTIC_CHECKPOINT_COUNT_FILE}" 2>/dev/null || echo -1)"
 if [[ "${count}" == "${previous}" ]]; then
