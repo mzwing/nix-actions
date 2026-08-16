@@ -14,6 +14,12 @@ inputs:
     required: false
     default: '330'
 
+  max-silent-seconds:
+    description: >-
+      Fail a build here that produces no output for this long. It has to be set on the builder: run 31921034156 passed --max-silent-time to the coordinator's `nix build` and two remote builds still sat silent for 169 minutes, because the machine actually running a build is the only one that enforces the limit. Without it one wedged derivation quietly eats the coordinator's whole budget instead of failing alone.
+    required: false
+    default: '2700'
+
 runs:
   using: composite
   steps:
@@ -22,4 +28,5 @@ runs:
       env:
         CLAIM_TIMEOUT_SECONDS: ${{ inputs.claim-timeout-seconds }}
         MAX_MINUTES: ${{ inputs.max-minutes }}
+        MAX_SILENT_SECONDS: ${{ inputs.max-silent-seconds }}
       run: bash ${{ github.action_path }}/serve.sh
