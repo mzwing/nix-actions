@@ -16,6 +16,10 @@ die() {
 
 emit_output() { printf '%s=%s\n' "$1" "$2" >>"${GITHUB_OUTPUT}"; }
 
+# Log folding, for steps that emit a lot (multi-GiB transfers, mostly).
+group() { printf '::group::%s\n' "$*"; }
+endgroup() { printf '::endgroup::\n'; }
+
 # ── input validation ──
 
 require_positive_int() {

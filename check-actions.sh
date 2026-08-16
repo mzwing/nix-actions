@@ -30,5 +30,34 @@ while IFS= read -r action; do
   done < <(yq -r '.runs.steps[]? | select(.run != null) | .run' "${action}")
 done < <(find "${here}" -name action.yml -not -path '*/.devenv/*' -not -path '*/.direnv/*')
 
-((status == 0)) && notice 'All actions invoke their scripts through an interpreter.'
+# The shared libraries' public surface. shellcheck cannot help here: to it an
+# undefined helper is indistinguishable from an external command, so deleting
+# one only surfaces as "command not found" mid-run — which is exactly how
+# `group` was lost in a comment cleanup and took out a cache job.
+# Add a name here when the scripts start depending on it.
+required_helpers=(
+  notice warn fail die emit_output group endgroup
+  require_positive_int require_non_negative_int require_port require_file require_signing_key
+  ci_ssh ci_scp ci_wait_until ci_wait_all builder_ids
+  ci_build_substituters ci_build_trusted_keys ci_public_cache_urls ci_public_cache_key_names
+  attic_schema_matches attic_object_count attic_running attic_assert_consistent attic_prune_by_path_list
+  rclone_setup ci_rclone
+)
+missing="$(
+  # shellcheck source=lib/caches.sh
+  . "${here}/lib/caches.sh"
+  # shellcheck source=store-cache/attic-state.sh
+  . "${here}/store-cache/attic-state.sh"
+  # shellcheck source=store-cache/rclone.sh
+  . "${here}/store-cache/rclone.sh"
+  for helper in "${required_helpers[@]}"; do
+    declare -F "${helper}" >/dev/null || printf '%s ' "${helper}"
+  done
+)"
+if [[ -n "${missing}" ]]; then
+  fail "Helpers the action scripts rely on are no longer defined: ${missing}"
+  status=1
+fi
+
+((status == 0)) && notice 'All actions invoke their scripts through an interpreter, and every shared helper still exists.'
 exit "${status}"
