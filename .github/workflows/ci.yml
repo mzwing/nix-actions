@@ -23,9 +23,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # Not nix/setup: that action lives here, and bootstrapping the linters through the thing being linted would make a broken commit unfixable.
+      # Not nix/setup: that action lives here, and bootstrapping the linters through the thing being linted would make a broken commit unfixable. The two steps below are what it would have done, inlined.
       - name: Install Nix
         uses: cachix/install-nix-action@v31
+
+      # The devenv shell pulls NUR packages that only this cache has prebuilt; without it they are compiled from source and the job times out.
+      - name: Configure Cachix for pulls
+        uses: cachix/cachix-action@v17
+        with:
+          name: mzwing
+          skipPush: true
 
       - name: Install devenv
         run: nix profile add nixpkgs#devenv

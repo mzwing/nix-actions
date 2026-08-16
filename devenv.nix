@@ -1,10 +1,4 @@
-{
-  inputs,
-  pkgs,
-  ...
-}: {
-  overlays = [inputs.nur.overlays.default];
-
+{pkgs, ...}: {
   languages.nix = {
     enable = true;
     lsp.enable = true;
@@ -25,7 +19,6 @@
     ty
     yamllint
     yq-go
-    nur.repos.mzwing.typenix
   ];
 
   enterTest = ''
@@ -40,6 +33,5 @@
     ty --version
     yamllint --version
     yq --version
-    typenix --version
   '';
 }
