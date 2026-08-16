@@ -1,6 +1,6 @@
 name: Plan distributed builds
 description: >-
-  Decide what still needs building and how wide the builder fleet should be. Probes the binary caches for every target's output path, drops the ones already published, and sizes each pool to the work actually scheduled for its system.
+  Decide what still needs building. Probes the binary caches for every target's output path, drops the ones already published, and starts every configured builder in each active system's pool.
 
 outputs:
   targets:

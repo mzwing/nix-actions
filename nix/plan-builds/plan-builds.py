@@ -2,8 +2,8 @@
 """Plan the distributed build matrix.
 
 Probes the binary caches for every candidate target, keeps the ones nobody can
-fetch yet, and sizes each builder pool to the work actually scheduled for its
-system. Invoked through plan-builds.sh, which supplies PROBE_CACHES.
+fetch yet, and starts every configured builder in each active system's pool.
+Invoked through plan-builds.sh, which supplies PROBE_CACHES.
 
 Writes `targets`, `extra_systems`, `builders` and `has_builds` to GITHUB_OUTPUT.
 """
@@ -17,7 +17,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
@@ -27,10 +26,6 @@ HTTP_TIMEOUT_SECONDS = 15
 ID_PREFIX_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 # Cachix sits behind Cloudflare, which 403s urllib's default User-Agent.
 USER_AGENT = "nix-ci-plan-builds"
-# Scheduled targets at which a pool runs at full width. Below it the pool scales
-# down, because booting every runner to rebuild one bumped target costs more in
-# setup than the build itself. Per-pool override: 'saturationTargets'.
-DEFAULT_SATURATION_TARGETS = 6
 
 
 def store_hash(store_path: str) -> str:
@@ -97,27 +92,12 @@ def load_builder_pools(path: Path) -> list[dict[str, Any]]:
             value = pool.get(key)
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 fail(f"'{key}' must be a positive integer, got {value!r}")
-        saturation = pool.get("saturationTargets", DEFAULT_SATURATION_TARGETS)
-        if (
-            not isinstance(saturation, int)
-            or isinstance(saturation, bool)
-            or saturation <= 0
-        ):
-            fail(f"'saturationTargets' must be a positive integer, got {saturation!r}")
 
     id_prefixes = [pool["idPrefix"] for pool in pools]
     if len(id_prefixes) != len(set(id_prefixes)):
         fail(f"duplicate 'idPrefix' values: {id_prefixes}")
 
     return pools
-
-
-def pool_width(pool: dict[str, Any], target_count: int) -> int:
-    """How many runners of this pool to start for that many scheduled targets."""
-    saturation = pool.get("saturationTargets", DEFAULT_SATURATION_TARGETS)
-    if target_count >= saturation:
-        return pool["count"]
-    return max(1, -(-pool["count"] * target_count // saturation))
 
 
 def main() -> None:
@@ -157,21 +137,10 @@ def main() -> None:
     if missing:
         sys.exit(f"No builder pool configured for: {', '.join(missing)}")
 
-    # An extra group counts as one unit of work for its system, so a system that
-    # is active only because of it still gets a builder.
-    scheduled = Counter(t["system"] for t in targets)
-    scheduled.update(extra_systems)
-
     builders = {"include": []}
     for pool in pools:
         if pool["system"] not in active_systems:
             continue
-        width = pool_width(pool, scheduled[pool["system"]])
-        print(
-            f"{pool['system']}: {scheduled[pool['system']]} scheduled "
-            f"-> {width}/{pool['count']} builders",
-            file=sys.stderr,
-        )
         builders["include"] += [
             {
                 "id": f"{pool['idPrefix']}-{index}",
@@ -179,7 +148,7 @@ def main() -> None:
                 "system": pool["system"],
                 "maxJobs": pool["maxJobs"],
             }
-            for index in range(1, width + 1)
+            for index in range(1, pool["count"] + 1)
         ]
 
     if extra_entries:
