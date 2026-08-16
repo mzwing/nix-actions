@@ -22,4 +22,4 @@ runs:
       env:
         CLAIM_TIMEOUT_SECONDS: ${{ inputs.claim-timeout-seconds }}
         MAX_MINUTES: ${{ inputs.max-minutes }}
-      run: ${{ github.action_path }}/serve.sh
+      run: bash ${{ github.action_path }}/serve.sh

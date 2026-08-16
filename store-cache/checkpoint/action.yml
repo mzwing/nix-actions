@@ -34,4 +34,4 @@ runs:
         DATA_DIR: ${{ inputs.data-dir }}
         CHECKPOINT_DIR: ${{ inputs.checkpoint-dir }}
         TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
-      run: ${{ github.action_path }}/checkpoint.sh
+      run: bash ${{ github.action_path }}/checkpoint.sh

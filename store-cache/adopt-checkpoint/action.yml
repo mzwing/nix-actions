@@ -21,4 +21,4 @@ runs:
       env:
         DATA_DIR: ${{ inputs.data-dir }}
         CHECKPOINT_DIR: ${{ inputs.checkpoint-dir }}
-      run: ${{ github.action_path }}/adopt-checkpoint.sh
+      run: bash ${{ github.action_path }}/adopt-checkpoint.sh

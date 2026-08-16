@@ -31,4 +31,4 @@ runs:
         BUILDER_PREFIX: ${{ inputs.builder-prefix }}
         CACHE_HOST: ${{ inputs.cache-host }}
         TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
-      run: ${{ github.action_path }}/release.sh
+      run: bash ${{ github.action_path }}/release.sh

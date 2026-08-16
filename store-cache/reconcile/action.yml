@@ -74,4 +74,4 @@ runs:
         EXTRA_PATHS_FILE: ${{ inputs.extra-paths-file }}
         TRANSFER_JOBS: ${{ inputs.transfer-jobs }}
         TRANSFER_TIMEOUT_MINUTES: ${{ inputs.transfer-timeout-minutes }}
-      run: ${{ github.action_path }}/reconcile.sh
+      run: bash ${{ github.action_path }}/reconcile.sh

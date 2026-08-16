@@ -42,4 +42,4 @@ runs:
         BUILDERS_JSON: ${{ inputs.builders-json }}
         BUILDER_PREFIX: ${{ inputs.builder-prefix }}
         TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
-      run: ${{ github.action_path }}/verify.sh
+      run: bash ${{ github.action_path }}/verify.sh

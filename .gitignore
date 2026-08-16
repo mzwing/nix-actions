@@ -11,3 +11,4 @@ devenv.local.yaml
 
 # tooling caches
 .ruff_cache
+__pycache__

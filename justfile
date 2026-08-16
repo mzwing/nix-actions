@@ -1,4 +1,6 @@
-# shfmt --find descends into the generated .devenv/.direnv trees, so keep it to real sources.
+# ruff and ty honour .gitignore; shfmt and alejandra do not, so the generated .devenv/.direnv trees are kept out by hand.
+# The ./ prefix on --exclude is load-bearing: alejandra matches it literally against the paths it produces while walking ".", so a bare ".devenv" silently excludes nothing.
+alejandra := "alejandra --exclude ./.devenv --exclude ./.direnv"
 shell_sources := "shfmt --find . | grep -v '^\\.'"
 
 default: lint
@@ -8,19 +10,20 @@ lint: lint-nix lint-yaml lint-actions lint-shell lint-python
 
 # Rewrite every file in place.
 fmt:
-    alejandra .
+    {{ alejandra }} .
     {{ shell_sources }} | xargs shfmt --write
     ruff format .
     ruff check --fix .
 
 lint-nix:
-    alejandra --check .
+    {{ alejandra }} --check .
 
 lint-yaml:
     yamllint .
 
 lint-actions:
     actionlint
+    ./check-actions.sh
 
 # Discovery is by shebang, so nothing needs a hand-maintained list.
 lint-shell:

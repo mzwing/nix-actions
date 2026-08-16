@@ -30,4 +30,4 @@ runs:
         BUILDER_PREFIX: ${{ inputs.builder-prefix }}
         SSH_HOST_PATTERN: ${{ inputs.ssh-host-pattern }}
         TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
-      run: ${{ github.action_path }}/attach.sh
+      run: bash ${{ github.action_path }}/attach.sh

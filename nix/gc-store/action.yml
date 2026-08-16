@@ -27,4 +27,4 @@ runs:
         DRVS_FILE: ${{ inputs.drvs-file }}
         EXTRA_PATHS_JSON: ${{ inputs.extra-paths-json }}
         GCROOTS_NAME: ${{ inputs.gcroots-name }}
-      run: ${{ github.action_path }}/gc-store.sh
+      run: bash ${{ github.action_path }}/gc-store.sh

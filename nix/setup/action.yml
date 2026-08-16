@@ -58,7 +58,7 @@ runs:
         EXTRA_TRUSTED_PUBLIC_KEYS: ${{ inputs.extra-trusted-public-keys }}
         MAX_JOBS: ${{ inputs.max-jobs }}
         SUBSTITUTER_SET: ${{ inputs.substituter-set }}
-      run: ${{ github.action_path }}/assemble-nix-config.sh
+      run: bash ${{ github.action_path }}/assemble-nix-config.sh
 
     - name: Install Nix
       uses: cachix/install-nix-action@v31

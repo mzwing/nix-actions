@@ -33,4 +33,4 @@ runs:
         PATHS_FILE: ${{ inputs.paths-file }}
         ROOT_PREFIX: ${{ inputs.root-prefix }}
         CLOSURE_PATHS_FILE: ${{ inputs.closure-paths-file }}
-      run: ${{ github.action_path }}/push.sh
+      run: bash ${{ github.action_path }}/push.sh

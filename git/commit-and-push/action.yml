@@ -36,7 +36,7 @@ runs:
       env:
         PATHS: ${{ inputs.paths }}
         MESSAGE: ${{ inputs.message }}
-      run: ${{ github.action_path }}/commit.sh
+      run: bash ${{ github.action_path }}/commit.sh
 
     - name: Push changes
       if: steps.commit.outputs.changed == 'true'

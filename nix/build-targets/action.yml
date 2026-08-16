@@ -1,0 +1,55 @@
+name: Build scheduled targets
+description: >-
+  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact.
+
+inputs:
+  targets:
+    description: 'Scheduled targets as JSON: [{name, system, outputPath, ...}].'
+    required: true
+
+  file:
+    description: Nix file to build; receives BUILD_SYSTEMS with the systems in scope.
+    required: false
+    default: ci/outputs.nix
+
+  timeout-minutes:
+    description: >-
+      Self-imposed budget. Must stay well under the runner's 6-hour limit: hitting that limit cancels the job, and cancellation skips every `if: !cancelled()` step after this one, so the push and reconciliation vanish and the run publishes nothing.
+    required: false
+    default: '200'
+
+  max-silent-seconds:
+    description: >-
+      Backstop for a build that wedges while its ssh link stays healthy, which the keepalives in builders/attach cannot see. Set far above the silent stretch of the slowest single derivation.
+    required: false
+    default: '3600'
+
+  build-log:
+    description: Full build log, for an upload-artifact step; the job log itself is size-capped and truncates silently.
+    required: false
+    default: /tmp/nix-build.log
+
+  built-outputs-file:
+    description: File to write the realised output paths to.
+    required: false
+    default: /tmp/built-outputs.txt
+
+  failed-targets-file:
+    description: File to write the names of targets that did not build to.
+    required: false
+    default: /tmp/failed-targets.txt
+
+runs:
+  using: composite
+  steps:
+    - name: Build scheduled targets
+      shell: bash
+      env:
+        TARGETS: ${{ inputs.targets }}
+        BUILD_FILE: ${{ inputs.file }}
+        BUILD_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        MAX_SILENT_SECONDS: ${{ inputs.max-silent-seconds }}
+        BUILD_LOG: ${{ inputs.build-log }}
+        BUILT_OUTPUTS_FILE: ${{ inputs.built-outputs-file }}
+        FAILED_TARGETS_FILE: ${{ inputs.failed-targets-file }}
+      run: bash ${{ github.action_path }}/build-targets.sh

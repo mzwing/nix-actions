@@ -39,4 +39,4 @@ runs:
         DATA_DIR: ${{ inputs.data-dir }}
         PORT: ${{ inputs.port }}
         ATTIC_NIXPKGS_REV: ${{ inputs.attic-nixpkgs-rev }}
-      run: ${{ github.action_path }}/start.sh
+      run: bash ${{ github.action_path }}/start.sh

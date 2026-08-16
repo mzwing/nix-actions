@@ -20,4 +20,4 @@ runs:
       env:
         PEER_HOSTNAME: ${{ inputs.hostname }}
         TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
-      run: ${{ github.action_path }}/pin-peer.sh
+      run: bash ${{ github.action_path }}/pin-peer.sh
