@@ -23,9 +23,10 @@ inputs:
     default: '24'
 
   timeout-minutes:
-    description: Cap on the whole pull.
+    description: >-
+      Cap on the whole pull. Every builder and the coordinator sit idle in store-cache/connect until this finishes, so raising it means raising that timeout too.
     required: false
-    default: '60'
+    default: '25'
 
   rclone-nixpkgs-rev:
     description: Pinned nixpkgs revision providing a prebuilt rclone.

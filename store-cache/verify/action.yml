@@ -26,9 +26,10 @@ inputs:
     required: true
 
   timeout-seconds:
-    description: How long to keep probing before failing.
+    description: >-
+      How long to keep probing before failing. Both ends are already up by the time this runs, so it only has to absorb the builder still realising its Attic client.
     required: false
-    default: '180'
+    default: '300'
 
 runs:
   using: composite

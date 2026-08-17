@@ -18,9 +18,10 @@ inputs:
     default: 'true'
 
   timeout-seconds:
-    description: How long to wait for the cache to publish bootstrap data.
+    description: >-
+      How long to wait for the cache to publish bootstrap data. The cache node only publishes it once the whole generation is restored, so this has to stay above store-cache/pull's own cap plus that job's setup — below it, every builder abandons a restore the cache job still considers healthy.
     required: false
-    default: '300'
+    default: '1800'
 
   attic-nixpkgs-rev:
     description: Pinned nixpkgs revision providing the prebuilt Attic client.

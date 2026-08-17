@@ -8,9 +8,10 @@ inputs:
     required: true
 
   timeout-seconds:
-    description: How long to wait for the peer to appear in the netmap.
+    description: >-
+      How long to wait for the peer to appear in the netmap. The clock starts when this runner boots, but the peer's job may still be queued behind it, so the budget covers scheduling skew rather than just the join.
     required: false
-    default: '180'
+    default: '600'
 
 runs:
   using: composite
