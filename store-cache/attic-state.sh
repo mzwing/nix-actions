@@ -10,9 +10,11 @@ ATTIC_CLIENT_FILE=/tmp/attic-client.json
 ATTIC_KEEP_PATHS_FILE=/tmp/attic-keep-paths.txt
 ATTIC_CHECKPOINT_COUNT_FILE=/tmp/attic-checkpoint-count
 
-# The columns the pruning SQL depends on. Attic is pinned, so a mismatch means the restored data is from a different schema.
+# The columns the pruning SQL and the orphan-reaping loop depend on. Attic is pinned, so a mismatch means the restored data is from a different schema.
+# Checked at startup so a schema surprise fails there rather than after a multi-hour build.
 attic_schema_matches() {
-  sqlite3 "$1" 'SELECT store_path, cache_id, nar_id, deriver FROM object LIMIT 0;' >/dev/null 2>&1
+  sqlite3 "$1" 'SELECT store_path, cache_id, nar_id, deriver FROM object LIMIT 0;' >/dev/null 2>&1 &&
+    sqlite3 "$1" 'SELECT state FROM chunk LIMIT 0;' >/dev/null 2>&1
 }
 
 attic_object_count() { sqlite3 "$1" 'SELECT count(*) FROM object;'; }

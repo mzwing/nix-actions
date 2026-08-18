@@ -8,6 +8,9 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../attic-state.sh
 . "${here}/../attic-state.sh"
 
+# 500 unlinks a pass, so this bounds the reaping loop at 100k chunks — far more than any generation this cache has held.
+readonly GC_MAX_PASSES=200
+
 require_positive_int deadline-minutes "${DEADLINE_MINUTES}"
 [[ -s "${ATTIC_PID_FILE}" && -s "${ATTIC_BIN_FILE}" ]] ||
   die 'Attic startup state is missing; store-cache/start did not run here.'
@@ -62,7 +65,27 @@ attic_assert_consistent "${database}" 'upstream pruning'
 notice "Removed ${public_count} objects now available from public substituters."
 
 # Reap NARs orphaned by either pruning pass, including interrupted uploads from red builds.
-"${atticd}" -f "${ATTIC_CONFIG_FILE}" --mode garbage-collector-once
+# One pass marks every orphan chunk 'D' but only unlinks 500 of them on SQLite (orphan_chunk_limit in atticd's gc.rs), so a single call leaves the rest on disk and the push then mirrors them back to the remote.
+# Run 32030630905 dropped 4230 objects here and freed exactly 500 files, which is how the remote kept growing across runs despite pruning.
+# Backlog stuck at the same value means the remaining unlinks are failing rather than queued, so more passes cannot help; the cap only bounds a runaway loop, at 500 unlinks each.
+gc_backlog() { sqlite3 "${database}" "SELECT count(*) FROM chunk WHERE state = 'D';"; }
+
+backlog=0
+previous_backlog=''
+passes=0
+while ((passes < GC_MAX_PASSES)); do
+  "${atticd}" -f "${ATTIC_CONFIG_FILE}" --mode garbage-collector-once
+  passes=$((passes + 1))
+  backlog="$(gc_backlog)"
+  if ((backlog == 0)); then break; fi
+  if [[ "${backlog}" == "${previous_backlog}" ]]; then break; fi
+  previous_backlog="${backlog}"
+done
+if ((backlog > 0)); then
+  warn "${backlog} orphaned NARs could not be unlinked and stay on the remote until a later run drains them."
+fi
+notice "Reaped orphaned NARs in ${passes} garbage-collection pass(es)."
+
 sqlite3 "${database}" 'PRAGMA wal_checkpoint(TRUNCATE); VACUUM;'
 integrity="$(sqlite3 "${database}" 'PRAGMA integrity_check;')"
 [[ "${integrity}" == ok ]] || die "Attic database failed final integrity_check: ${integrity}"
