@@ -1,6 +1,6 @@
 name: Build scheduled targets
 description: >-
-  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact.
+  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact. A builder that dies mid-build takes every derivation in flight on it down with it, so on failure the fleet is probed and the build runs once more without whoever stopped answering.
 
 inputs:
   targets:
@@ -14,9 +14,15 @@ inputs:
 
   timeout-minutes:
     description: >-
-      Self-imposed budget. Must stay well under the runner's 6-hour limit: hitting that limit cancels the job, and cancellation skips every `if: !cancelled()` step after this one, so the push and reconciliation vanish and the run publishes nothing.
+      Self-imposed budget for the whole step, retry included. Must stay well under the runner's 6-hour limit: hitting that limit cancels the job, and cancellation skips every `if: !cancelled()` step after this one, so the push and reconciliation vanish and the run publishes nothing.
     required: false
     default: '200'
+
+  builder-probe-seconds:
+    description: >-
+      Bound on the liveness probe sent to each builder after a failed build. Only a machine that fails to answer within it is treated as lost and evicted before the retry, which is what keeps a genuinely broken package from being built twice.
+    required: false
+    default: '30'
 
   max-silent-seconds:
     description: >-
@@ -49,6 +55,7 @@ runs:
         BUILD_FILE: ${{ inputs.file }}
         BUILD_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
         MAX_SILENT_SECONDS: ${{ inputs.max-silent-seconds }}
+        BUILDER_PROBE_SECONDS: ${{ inputs.builder-probe-seconds }}
         BUILD_LOG: ${{ inputs.build-log }}
         BUILT_OUTPUTS_FILE: ${{ inputs.built-outputs-file }}
         FAILED_TARGETS_FILE: ${{ inputs.failed-targets-file }}

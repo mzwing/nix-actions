@@ -36,5 +36,5 @@ lint-python:
     ty check
 
 # Check the consuming repositories against this one; catches a rename or a dropped input before a six-hour build does.
-check-consumers *repos='../nur-packages ../nix-config':
+check-consumers *repos='../gomod2nix ../nur-packages ../nix-config':
     ./check-consumers.sh {{ repos }}

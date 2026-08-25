@@ -5,14 +5,30 @@
 
 require_positive_int timeout-minutes "${BUILD_TIMEOUT_MINUTES}"
 require_positive_int max-silent-seconds "${MAX_SILENT_SECONDS}"
+require_positive_int builder-probe-seconds "${BUILDER_PROBE_SECONDS}"
+
+# Written by builders/attach; absent when the caller builds without a fleet.
+MACHINES_FILE=/etc/nix/machines
 
 build_systems="$(jq -c '[.[].system] | unique' <<<"${TARGETS}")"
 : >"${BUILD_LOG}"
 
-set +e
-{
-  printf '### Built outputs\n\n'
-  BUILD_SYSTEMS="${build_systems}" timeout --signal=INT --kill-after=5m "${BUILD_TIMEOUT_MINUTES}m" \
+# One deadline for the whole step, shared by every pass. Giving each pass its own
+# budget could add up past the runner's 6-hour limit, and hitting that limit
+# cancels the job -- which makes `if: !cancelled()` false for every step after
+# this one, so the push and the reconciliation vanish and the run publishes nothing.
+deadline=$((SECONDS + BUILD_TIMEOUT_MINUTES * 60))
+
+lost_builders=()
+
+# Realise every scheduled target, streaming the out-paths to the step summary and
+# the full log to the artifact file. Returns nix's own status.
+run_build() {
+  local budget=$((deadline - SECONDS)) status=0
+  ((budget > 0)) || return 124
+
+  set +e
+  BUILD_SYSTEMS="${build_systems}" timeout --signal=INT --kill-after=5m "${budget}s" \
     nix build \
     --impure \
     --file "${BUILD_FILE}" \
@@ -24,14 +40,84 @@ set +e
     --max-silent-time "${MAX_SILENT_SECONDS}" \
     --keep-going \
     2> >(tee -a "${BUILD_LOG}" >&2) |
-    tee "${BUILT_OUTPUTS_FILE}" |
     while IFS= read -r path; do
       # shellcheck disable=SC2016  # backticks are markdown for the step summary
       printf -- '- `%s`\n' "${path}"
-    done
-} >>"${GITHUB_STEP_SUMMARY}"
-build_status=$?
-set -e
+    done >>"${GITHUB_STEP_SUMMARY}"
+  status=$?
+  set -e
+  return "${status}"
+}
+
+# Drop builders that stopped answering ssh, recording them in lost_builders.
+# Returns 0 when at least one was dropped.
+#
+# Nix reschedules a build onto another machine only while dispatching; once a
+# build is running it cannot tell whether a dead connection means the far side
+# is still working, so every derivation in flight on a machine that dies is
+# marked failed and that failure cascades up the dependency graph. Evicting the
+# corpse is what makes a second pass worth running -- and probing, rather than
+# grepping the log, is what tells a dead machine apart from a genuinely broken
+# package: `cannot build on ...` also appears when nix simply falls through to
+# the next machine, and the lines that mark the real event (`Broken pipe`,
+# `Nix daemon disconnected unexpectedly`) name no host.
+evict_lost_builders() {
+  local line host
+  local kept=()
+
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    host="${line%% *}"
+    host="${host##*@}"
+    if ci_ssh -t "${BUILDER_PROBE_SECONDS}" "${host}" true >/dev/null 2>&1; then
+      kept+=("${line}")
+    else
+      lost_builders+=("${host}")
+    fi
+  done <"${MACHINES_FILE}"
+
+  ((${#lost_builders[@]} > 0)) || return 1
+
+  if ((${#kept[@]} > 0)); then
+    printf '%s\n' "${kept[@]}" | sudo tee "${MACHINES_FILE}" >/dev/null
+  else
+    sudo tee "${MACHINES_FILE}" </dev/null
+  fi
+
+  local system
+  while IFS= read -r system; do
+    awk -v want="${system}" '$2 == want { found = 1 } END { exit !found }' "${MACHINES_FILE}" ||
+      warn "No builder left for ${system}; its targets cannot be retried."
+  done < <(jq -r '.[]' <<<"${build_systems}")
+}
+
+printf '### Built outputs\n\n' >>"${GITHUB_STEP_SUMMARY}"
+
+build_status=0
+run_build || build_status=$?
+
+# A timeout is a budget problem, not a connectivity one, so it is never retried.
+if ((build_status != 0 && build_status != 124 && build_status != 137)) && [[ -s "${MACHINES_FILE}" ]]; then
+  if evict_lost_builders; then
+    {
+      printf '\n### Builders lost mid-build\n\n'
+      for host in "${lost_builders[@]}"; do
+        # shellcheck disable=SC2016  # backticks are markdown for the step summary
+        printf -- '- `%s`\n' "${host}"
+      done
+    } >>"${GITHUB_STEP_SUMMARY}"
+    warn "Lost ${#lost_builders[@]} builder(s) mid-build: ${lost_builders[*]}"
+
+    if [[ -s "${MACHINES_FILE}" ]]; then
+      notice 'Retrying the build once without them; everything already realised is a no-op.'
+      printf '\nRetried the build once without them.\n' >>"${GITHUB_STEP_SUMMARY}"
+      build_status=0
+      run_build || build_status=$?
+    else
+      warn 'No builders survived, so there is nothing left to retry on.'
+    fi
+  fi
+fi
 
 if ((build_status == 124 || build_status == 137)); then
   fail "The distributed build exceeded its ${BUILD_TIMEOUT_MINUTES}-minute budget; publishing whatever finished."
