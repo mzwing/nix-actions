@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs on a builder, fed over ssh stdin. Reads realised paths from $1 and reports which ones this builder can expand.
 # Emits `FOUND<TAB>path` for each input path whose deriver lives here, then `PATH<TAB>path` for every output in those derivers' closures.
+# Best-effort enrichment only: a path the coordinator substituted rather than delegated has no deriver on any builder, so a miss is ordinary and never fatal.
 set -euo pipefail
 
 input="$1"
