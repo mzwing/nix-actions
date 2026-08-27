@@ -1,6 +1,6 @@
 name: Stage builder store cache checkpoint
 description: >-
-  Wait for the coordinator's checkpoint signal, the done file, or a timeout, then stage a consistent snapshot of the live Attic data for the following cache save. Rounds where the run is already finishing, atticd died, or nothing changed stage nothing, so a cancelled long build still leaves a recent warm generation behind without redundant multi-GiB uploads.
+  Wait for the coordinator's checkpoint signal, the done file, or a timeout, then stage a consistent snapshot of the live Attic data for the following cache save. Rounds where the run is already finishing, atticd died, or nothing changed stage nothing, so a cancelled long build still leaves a recent warm generation behind without redundant multi-GiB uploads. Staging is not optional: atticd keeps writing while this runs, and every save backend either rejects or truncates a file that changes under it.
 
 outputs:
   checkpoint-ready:
@@ -23,12 +23,6 @@ inputs:
     required: false
     default: '90'
 
-  stage:
-    description: >-
-      Whether to stage a snapshot for a following cache save. Backends that persist the live directory directly — store-cache/push, whose storage tree is content-addressed and written once — only need the wait, so they set this to false and the action just reports when to push.
-    required: false
-    default: 'true'
-
 runs:
   using: composite
   steps:
@@ -40,5 +34,4 @@ runs:
         DATA_DIR: ${{ inputs.data-dir }}
         CHECKPOINT_DIR: ${{ inputs.checkpoint-dir }}
         TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
-        STAGE: ${{ inputs.stage }}
       run: bash ${{ github.action_path }}/checkpoint.sh

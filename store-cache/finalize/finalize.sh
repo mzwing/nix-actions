@@ -38,6 +38,9 @@ if kill -0 "${atticd_pid}" 2>/dev/null; then
   wait "${atticd_pid}" 2>/dev/null || true
 fi
 
+# Every checkpoint round has been saved by now, and the staged snapshot is hardlinked into the live tree, so leaving it would keep the reaping below from freeing a single block.
+find "${CHECKPOINT_DIR}" -mindepth 1 -delete
+
 # On a red or cancelled coordinator run there is no keep-set; preserve everything uploaded rather than pruning from an incomplete closure.
 if [[ -s "${ATTIC_KEEP_PATHS_FILE}" ]]; then
   attic_schema_matches "${database}" || die 'Attic database schema no longer matches deterministic pruning.'

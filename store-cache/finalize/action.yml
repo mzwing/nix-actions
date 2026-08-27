@@ -13,6 +13,11 @@ inputs:
     required: false
     default: /nix/attic-data
 
+  checkpoint-dir:
+    description: Staging directory for mid-run snapshots, discarded here so its hardlinks stop pinning reaped NARs.
+    required: false
+    default: /nix/attic-checkpoint
+
   deadline-minutes:
     description: >-
       How long to wait for the coordinator. Must fit inside the job's own timeout with room for the save that follows.
@@ -28,5 +33,6 @@ runs:
       shell: bash
       env:
         DATA_DIR: ${{ inputs.data-dir }}
+        CHECKPOINT_DIR: ${{ inputs.checkpoint-dir }}
         DEADLINE_MINUTES: ${{ inputs.deadline-minutes }}
       run: bash ${{ github.action_path }}/finalize.sh
