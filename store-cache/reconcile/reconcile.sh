@@ -29,10 +29,18 @@ for_each_builder() {
 }
 
 # Batch roots so this is one nix process per 128 derivations rather than per derivation.
+# Not `|| true`: both closures feed the retention set, and a short one silently drops live paths from it, which prunes them out of Attic.
 expand_drv_closure() {
   : >"$2"
   [[ -s "$1" ]] || return 0
-  xargs -n 128 nix-store --query --requisites <"$1" | grep '\.drv$' | sort --unique >"$2" || true
+  xargs -n 128 nix-store --query --requisites <"$1" | grep '\.drv$' | sort --unique >"$2"
+}
+
+# `nix derivation show` reports null paths for fixed-output and floating-CA outputs, so resolve them from the store in batches instead.
+query_drv_outputs() {
+  : >"$2"
+  [[ -s "$1" ]] || return 0
+  xargs -n 128 nix-store --query --outputs <"$1" | sort --unique >"$2"
 }
 
 # ── flush the builders' upload spools ──
@@ -53,8 +61,10 @@ sort --unique "${ACTIVE_DRVS_FILE}" >"${work}/active-top-drvs.txt"
 notice "Retention roots: $(wc -l <"${work}/top-drvs.txt"); scheduled roots: $(wc -l <"${work}/active-top-drvs.txt")."
 
 notice 'Expanding full and scheduled derivation closures...'
-expand_drv_closure "${work}/top-drvs.txt" "${work}/drvs.txt"
-expand_drv_closure "${work}/active-top-drvs.txt" "${work}/active-drvs.txt"
+expand_drv_closure "${work}/top-drvs.txt" "${work}/drvs.txt" ||
+  die 'Could not expand the full retention derivation closure.'
+expand_drv_closure "${work}/active-top-drvs.txt" "${work}/active-drvs.txt" ||
+  die 'Could not expand the scheduled derivation closure.'
 notice "Derivation closure: $(wc -l <"${work}/drvs.txt") total; $(wc -l <"${work}/active-drvs.txt") scheduled."
 
 unexpanded="$(
@@ -63,13 +73,13 @@ unexpanded="$(
 )"
 [[ -z "${unexpanded}" ]] || die "Could not expand top-level derivations: ${unexpanded}"
 
-# `nix derivation show` reports null paths for fixed-output and floating-CA outputs, so resolve them from the store in batches instead.
-: >"${work}/active-outputs.txt"
-if [[ -s "${work}/active-drvs.txt" ]]; then
-  xargs -n 128 nix-store --query --outputs <"${work}/active-drvs.txt" |
-    sort --unique >"${work}/active-outputs.txt"
-fi
-notice "Scheduled derivation closure has $(wc -l <"${work}/active-outputs.txt") output paths."
+# The retention set is every output the current lock can produce, whether or not this run scheduled it.
+# Deriving it from the closure rather than from Attic's own `deriver` column is what keeps a run that schedules three targets from pruning the cache down to those three targets' closure.
+query_drv_outputs "${work}/drvs.txt" "${work}/retained-outputs.txt" ||
+  die 'Could not resolve the retention closure output paths.'
+query_drv_outputs "${work}/active-drvs.txt" "${work}/active-outputs.txt" ||
+  die 'Could not resolve the scheduled closure output paths.'
+notice "Output paths: $(wc -l <"${work}/retained-outputs.txt") retained; $(wc -l <"${work}/active-outputs.txt") scheduled."
 
 # ── outputs with no static derivation (devenv and friends) ──
 # The coordinator realises these itself, so a substitutable one arrives from a public cache and never touches a builder — with no .drv anywhere, only its runtime closure is recoverable.
@@ -133,23 +143,17 @@ if ! ci_wait_until 300 15 'the Attic drainers to flush' drained; then
 fi
 
 ci_ssh "${CACHE_HOST}" \
-  "sqlite3 '${CACHE_DATA_DIR}/server.db' \"SELECT store_path || char(9) || COALESCE(deriver, '') FROM object;\"" \
-  >"${work}/attic-objects.txt" ||
+  "sqlite3 '${CACHE_DATA_DIR}/server.db' 'SELECT store_path FROM object;'" \
+  >"${work}/attic-paths.txt" ||
   die 'Could not read Attic object metadata from the cache host.'
-cut -f1 "${work}/attic-objects.txt" | sort --unique >"${work}/attic-paths.txt"
-
-# Existing objects record their producing derivation, so unscheduled targets still contribute retention by deriver.
-awk -F'\t' '
-  NR == FNR { current[$0] = 1; basename = $0; sub(/^.*\//, "", basename); current[basename] = 1; next }
-  $2 in current { print $1 }
-' "${work}/drvs.txt" "${work}/attic-objects.txt" | sort --unique >"${work}/current-attic-paths.txt"
+sort --unique -o "${work}/attic-paths.txt" "${work}/attic-paths.txt"
 
 # ── what to keep, and what the builders must still supply ──
 
 : >"${work}/public.txt"
 [[ -s "${PUBLIC_PATHS_FILE}" ]] && sort --unique "${PUBLIC_PATHS_FILE}" >"${work}/public.txt"
 
-cat "${work}/active-outputs.txt" "${work}/extra-expected.txt" "${work}/current-attic-paths.txt" |
+cat "${work}/retained-outputs.txt" "${work}/extra-expected.txt" |
   sort --unique >"${work}/expected.all.txt"
 cat "${work}/active-outputs.txt" "${work}/extra-expected.txt" |
   sort --unique >"${work}/required.all.txt"

@@ -25,8 +25,9 @@ inputs:
   timeout-minutes:
     description: >-
       Cap on the whole pull. Every builder and the coordinator sit idle in store-cache/connect until this finishes, so raising it means raising that timeout too.
+      Wall time tracks the object count rather than the byte count, the tree being tens of thousands of small files: roughly 5,000 objects in nine minutes and 7,400 in thirteen.
     required: false
-    default: '25'
+    default: '35'
 
   rclone-nixpkgs-rev:
     description: Pinned nixpkgs revision providing a prebuilt rclone.
