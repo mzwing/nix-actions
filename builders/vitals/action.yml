@@ -1,0 +1,47 @@
+name: Sample builder vitals
+description: >-
+  Record every builder's free disk, free memory and swap use on a fixed interval, from the coordinator. A runner that loses contact with GitHub takes its own log to the grave, so the coordinator is the only place the numbers from just before the death survive. Starts in the background and keeps sampling until the job ends.
+
+inputs:
+  builders-json:
+    description: 'Builder matrix JSON ({"include": [{"id", ...}, ...]}).'
+    required: true
+
+  builder-prefix:
+    description: Hostname prefix of the builders (e.g. nix-b-<run_id>-<attempt>).
+    required: true
+
+  log-file:
+    description: Where the samples are written; collect it as an artifact, since the job log is capped.
+    required: false
+    default: /tmp/builder-vitals.log
+
+  interval-seconds:
+    description: Delay between rounds. Every builder is probed concurrently within a round.
+    required: false
+    default: '60'
+
+  probe-timeout-seconds:
+    description: >-
+      Per-builder bound on one probe. Keep it well under the interval: the line before an UNREACHABLE is the entire point of this log, so a wedged probe must not swallow the round that would have recorded it.
+    required: false
+    default: '30'
+
+  duration-minutes:
+    description: Upper bound on the sampling window, for the case where the job outlives the build.
+    required: false
+    default: '330'
+
+runs:
+  using: composite
+  steps:
+    - name: Sample builder vitals
+      shell: bash
+      env:
+        BUILDERS_JSON: ${{ inputs.builders-json }}
+        BUILDER_PREFIX: ${{ inputs.builder-prefix }}
+        LOG_FILE: ${{ inputs.log-file }}
+        INTERVAL_SECONDS: ${{ inputs.interval-seconds }}
+        PROBE_TIMEOUT_SECONDS: ${{ inputs.probe-timeout-seconds }}
+        DURATION_MINUTES: ${{ inputs.duration-minutes }}
+      run: bash ${{ github.action_path }}/vitals.sh
