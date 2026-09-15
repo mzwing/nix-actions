@@ -10,10 +10,8 @@ notice "Store size before GC: $(du -sh /nix/store | cut -f1)"
 
 nix eval --json --impure --file "${DRVS_FILE}" | jq -r '.[]' >"${work}/drvs.txt"
 
-{
-  xargs nix-store --query --requisites --include-outputs <"${work}/drvs.txt"
-  [[ -z "${EXTRA_PATHS_JSON}" ]] || jq -r '.. | strings' <<<"${EXTRA_PATHS_JSON}"
-} | sort --unique >"${work}/keep.txt"
+xargs nix-store --query --requisites --include-outputs <"${work}/drvs.txt" |
+  sort --unique >"${work}/keep.txt"
 
 # --requisites lists closure paths that may not exist locally, so filter to what is actually present before rooting.
 while IFS= read -r path; do

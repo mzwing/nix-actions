@@ -1,0 +1,79 @@
+name: Restore builder store cache
+description: >-
+  Load the persisted Attic generation into the live data directory, from an rclone remote when one is given and from the GitHub Actions cache otherwise.
+
+  Which backend a repository wants follows from what it publishes. A repository that pushes everything it builds to Cachix keeps nothing here worth a remote, and the Actions cache is free; one that publishes only `out` and retains every other closure privately outgrows the 10 GiB repository quota and needs the remote.
+
+inputs:
+  remote:
+    description: 'rclone destination holding the generation, e.g. onedrive:nix-ci/attic. Empty selects the Actions cache.'
+    required: false
+    default: ''
+
+  data-dir:
+    description: Live Attic data directory.
+    required: false
+    default: /nix/attic-data
+
+  checkpoint-dir:
+    description: Directory a restored Actions cache checkpoint lands in.
+    required: false
+    default: /nix/attic-checkpoint
+
+  key-prefix:
+    description: >-
+      Actions cache key family. The checkpoint family is this plus "chk", so one prefix covers both when purging.
+    required: false
+    default: nix-builder-attic
+
+  transfers:
+    description: Concurrent object transfers. The storage tree is tens of thousands of small files, so this dominates wall time.
+    required: false
+    default: '24'
+
+  timeout-minutes:
+    description: >-
+      Cap on an rclone pull. Every builder and the coordinator sit idle in store-cache/connect until this finishes, so raising it means raising that timeout too.
+      Wall time tracks the object count rather than the byte count, the tree being tens of thousands of small files: roughly 5,000 objects in nine minutes and 7,400 in thirteen.
+    required: false
+    default: '35'
+
+runs:
+  using: composite
+  steps:
+    # A unique primary key avoids save races; the prefix restore picks the latest generation. Only Attic's database and NAR storage, never /nix/store.
+    - name: Restore finalized generation
+      if: inputs.remote == ''
+      uses: nix-community/cache-nix-action/restore@v7
+      with:
+        primary-key: ${{ inputs.key-prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-prefixes-first-match: ${{ inputs.key-prefix }}-
+        nix: false
+        paths: ${{ inputs.data-dir }}
+
+    - name: Restore checkpoint generation
+      if: inputs.remote == ''
+      uses: nix-community/cache-nix-action/restore@v7
+      with:
+        primary-key: ${{ inputs.key-prefix }}chk-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-prefixes-first-match: ${{ inputs.key-prefix }}chk-
+        nix: false
+        paths: ${{ inputs.checkpoint-dir }}
+
+    - name: Adopt checkpoint generation
+      if: inputs.remote == ''
+      shell: bash
+      env:
+        DATA_DIR: ${{ inputs.data-dir }}
+        CHECKPOINT_DIR: ${{ inputs.checkpoint-dir }}
+      run: bash ${{ github.action_path }}/adopt-checkpoint.sh
+
+    - name: Pull generation from the remote
+      if: inputs.remote != ''
+      shell: bash
+      env:
+        REMOTE: ${{ inputs.remote }}
+        DATA_DIR: ${{ inputs.data-dir }}
+        RCLONE_TRANSFERS: ${{ inputs.transfers }}
+        RCLONE_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+      run: bash ${{ github.action_path }}/pull.sh

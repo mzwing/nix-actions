@@ -3,6 +3,8 @@
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../lib/ci.sh
 . "${here}/../../lib/ci.sh"
+# shellcheck source=../../lib/pins.sh
+. "${here}/../../lib/pins.sh"
 # shellcheck source=../attic-state.sh
 . "${here}/../attic-state.sh"
 
@@ -30,7 +32,7 @@ require_signing_key 'the Attic cache signing key' "${public_key}"
 
 if [[ "${POST_BUILD_HOOK}" == 'true' ]]; then
   # attic-client is prebuilt in cache.nixos.org for every builder system; max-jobs=0 fails rather than compiling it here.
-  attic_client="$(nix eval --raw "github:NixOS/nixpkgs/${ATTIC_NIXPKGS_REV}#attic-client.outPath")"
+  attic_client="$(nix eval --raw "github:NixOS/nixpkgs/${CI_NIXPKGS_REV}#attic-client.outPath")"
   nix-store --realise --option max-jobs 0 "${attic_client}" >/dev/null
 
   sudo install -d -m 700 /etc/attic

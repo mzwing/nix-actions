@@ -41,12 +41,6 @@ inputs:
     required: false
     default: /tmp/push-outputs.txt
 
-  extra-paths-file:
-    description: >-
-      Realised outputs without a static derivation path (devenv outputs, for example) to include in reconciliation and retention.
-    required: false
-    default: ''
-
   transfer-jobs:
     description: Concurrent Attic uploads per builder.
     required: false
@@ -71,7 +65,6 @@ runs:
         DRVS_FILE: ${{ inputs.drvs-file }}
         ACTIVE_DRVS_FILE: ${{ inputs.active-drvs-file }}
         PUBLIC_PATHS_FILE: ${{ inputs.public-paths-file }}
-        EXTRA_PATHS_FILE: ${{ inputs.extra-paths-file }}
         TRANSFER_JOBS: ${{ inputs.transfer-jobs }}
         TRANSFER_TIMEOUT_MINUTES: ${{ inputs.transfer-timeout-minutes }}
       run: bash ${{ github.action_path }}/reconcile.sh

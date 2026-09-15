@@ -24,6 +24,7 @@ lint-yaml:
 lint-actions:
     actionlint
     ./check-actions.sh
+    ./check-budget.sh
 
 # Discovery is by shebang, so nothing needs a hand-maintained list.
 lint-shell:
@@ -36,5 +37,6 @@ lint-python:
     ty check
 
 # Check the consuming repositories against this one; catches a rename or a dropped input before a six-hour build does.
-check-consumers *repos='../gomod2nix ../nur-packages ../nix-config':
+# "." is in the list because distributed-build.yml consumes these actions like any other caller.
+check-consumers *repos='. ../gomod2nix ../nur-packages ../nix-config':
     ./check-consumers.sh {{ repos }}

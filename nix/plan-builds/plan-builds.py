@@ -5,7 +5,7 @@ Probes the binary caches for every candidate target, keeps the ones nobody can
 fetch yet, and starts every configured builder in each active system's pool.
 Invoked through plan-builds.sh, which supplies PROBE_CACHES.
 
-Writes `targets`, `extra_systems`, `builders` and `has_builds` to GITHUB_OUTPUT.
+Writes `targets`, `builders` and `has_builds` to GITHUB_OUTPUT.
 """
 
 from __future__ import annotations
@@ -102,8 +102,6 @@ def load_builder_pools(path: Path) -> list[dict[str, Any]]:
 
 def main() -> None:
     all_targets: list[dict[str, Any]] = json.loads(os.environ["ALL_TARGETS"])
-    extra_outputs: dict[str, list[str]] = json.loads(os.environ["EXTRA_OUTPUTS"])
-    extra_name = os.environ["EXTRA_NAME"]
     primary_output = os.environ["PRIMARY_OUTPUT"]
     pools = load_builder_pools(Path(os.environ["BUILDERS_FILE"]))
     caches = os.environ["PROBE_CACHES"].split()
@@ -116,23 +114,11 @@ def main() -> None:
     ]
 
     probe = partial(is_cached, caches=caches)
-    extra_entries = [
-        (system, path) for system, paths in extra_outputs.items() for path in paths
-    ]
     with ThreadPoolExecutor() as executor:
         hits = executor.map(probe, (t["outputPath"] for t in candidates))
         targets = [t for t, hit in zip(candidates, hits, strict=True) if not hit]
 
-        extra_hits = executor.map(probe, (path for _, path in extra_entries))
-        extra_systems = sorted(
-            {
-                system
-                for (system, _), hit in zip(extra_entries, extra_hits, strict=True)
-                if not hit
-            }
-        )
-
-    active_systems = sorted({t["system"] for t in targets} | set(extra_systems))
+    active_systems = sorted({t["system"] for t in targets})
     missing = [s for s in active_systems if s not in {p["system"] for p in pools}]
     if missing:
         sys.exit(f"No builder pool configured for: {', '.join(missing)}")
@@ -151,15 +137,9 @@ def main() -> None:
             for index in range(1, pool["count"] + 1)
         ]
 
-    if extra_entries:
-        print(
-            f"{extra_name}: rebuilding on {extra_systems or 'nothing'}", file=sys.stderr
-        )
-
     outputs = {
         "builders": json.dumps(builders, separators=(",", ":")),
-        "extra_systems": json.dumps(extra_systems, separators=(",", ":")),
-        "has_builds": "true" if targets or extra_systems else "false",
+        "has_builds": "true" if targets else "false",
         "targets": json.dumps(targets, separators=(",", ":")),
     }
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:

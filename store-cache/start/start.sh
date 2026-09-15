@@ -5,6 +5,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${here}/../../lib/ci.sh"
 # shellcheck source=../../lib/caches.sh
 . "${here}/../../lib/caches.sh"
+# shellcheck source=../../lib/pins.sh
+. "${here}/../../lib/pins.sh"
 # shellcheck source=../attic-state.sh
 . "${here}/../attic-state.sh"
 
@@ -14,8 +16,8 @@ require_port port "${PORT}"
 rm -f "${ATTIC_CLIENT_FILE}"
 
 # Both outputs are prebuilt for this Linux host; max-jobs=0 turns a missing substitute into a failure rather than a local Rust build.
-attic_server="$(nix eval --raw "github:NixOS/nixpkgs/${ATTIC_NIXPKGS_REV}#attic-server.outPath")"
-attic_client="$(nix eval --raw "github:NixOS/nixpkgs/${ATTIC_NIXPKGS_REV}#attic-client.outPath")"
+attic_server="$(nix eval --raw "github:NixOS/nixpkgs/${CI_NIXPKGS_REV}#attic-server.outPath")"
+attic_client="$(nix eval --raw "github:NixOS/nixpkgs/${CI_NIXPKGS_REV}#attic-client.outPath")"
 nix-store --realise --option max-jobs 0 "${attic_server}" "${attic_client}" >/dev/null
 atticd="${attic_server}/bin/atticd"
 atticadm="${attic_server}/bin/atticadm"
@@ -79,7 +81,7 @@ while IFS= read -r key_name; do
 done < <(ci_public_cache_key_names)
 
 if "${attic}" cache info "ci:${CACHE_NAME}" >/dev/null 2>&1; then
-  # Rotate every run so the key inside a restored Actions cache entry is already stale; clients only ever trust this run's fetched key.
+  # Rotate every run so the key inside a restored generation is already stale; clients only ever trust this run's fetched key.
   "${attic}" cache configure --regenerate-keypair --public "${upstream_args[@]}" "ci:${CACHE_NAME}"
 else
   "${attic}" cache create --public "${upstream_args[@]}" "ci:${CACHE_NAME}"

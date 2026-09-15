@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage PATHS and commit as github-actions[bot], reporting whether anything changed.
+# Stage PATHS, commit as github-actions[bot], push, and optionally trigger another workflow.
 # shellcheck source=../../lib/ci.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../../lib/ci.sh"
 
@@ -11,9 +11,14 @@ git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 git add -- ${PATHS}
 
 if git diff --cached --quiet; then
-  emit_output changed false
+  notice 'Nothing to commit.'
   exit 0
 fi
 
 git commit -m "${MESSAGE}"
-emit_output changed true
+
+# actions/checkout leaves the token in the remote's extraheader, so a plain push authenticates. It also checks out a detached HEAD, hence the explicit refspec.
+git push origin "HEAD:${GITHUB_REF}"
+
+[[ -n "${TRIGGER_WORKFLOW}" ]] || exit 0
+gh workflow run "${TRIGGER_WORKFLOW}" --ref "${GITHUB_REF}"

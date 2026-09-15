@@ -13,9 +13,9 @@ _ci_build_caches=(
   "https://attic.xuyh0120.win/lantian	lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc=	extra"
 )
 
-# Caches some jobs pull from but nothing builds against; they still make a path public, so pruning must know about them.
-_ci_extra_public_caches=(
-  "https://devenv.cachix.org	devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=	extra"
+# devenv's own cache. Only jobs that install devenv build against it, but it makes a path public either way, so pruning always counts it.
+_ci_devenv_caches=(
+  "https://devenv.cachix.org	devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=	devenv"
 )
 
 _ci_field() { cut -d'	' -f"$1"; }
@@ -34,11 +34,15 @@ ci_build_substituters() {
 # Always the full set: trusting a key the machine never queries costs nothing, while missing one turns a valid substitute into a rebuild.
 ci_build_trusted_keys() { printf '%s\n' "${_ci_build_caches[@]}" | _ci_field 2 | paste -sd' ' -; }
 
+ci_devenv_substituters() { printf '%s\n' "${_ci_devenv_caches[@]}" | _ci_field 1 | paste -sd' ' -; }
+
+ci_devenv_trusted_keys() { printf '%s\n' "${_ci_devenv_caches[@]}" | _ci_field 2 | paste -sd' ' -; }
+
 # Newline-separated, for the pruning passes: anything already public must not be stored privately.
 ci_public_cache_urls() {
-  printf '%s\n' "${_ci_build_caches[@]}" "${_ci_extra_public_caches[@]}" | _ci_field 1
+  printf '%s\n' "${_ci_build_caches[@]}" "${_ci_devenv_caches[@]}" | _ci_field 1
 }
 
 ci_public_cache_key_names() {
-  printf '%s\n' "${_ci_build_caches[@]}" "${_ci_extra_public_caches[@]}" | _ci_field 2 | cut -d: -f1
+  printf '%s\n' "${_ci_build_caches[@]}" "${_ci_devenv_caches[@]}" | _ci_field 2 | cut -d: -f1
 }

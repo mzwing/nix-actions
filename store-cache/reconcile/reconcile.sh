@@ -81,41 +81,6 @@ query_drv_outputs "${work}/active-drvs.txt" "${work}/active-outputs.txt" ||
   die 'Could not resolve the scheduled closure output paths.'
 notice "Output paths: $(wc -l <"${work}/retained-outputs.txt") retained; $(wc -l <"${work}/active-outputs.txt") scheduled."
 
-# ── outputs with no static derivation (devenv and friends) ──
-# The coordinator realises these itself, so a substitutable one arrives from a public cache and never touches a builder — with no .drv anywhere, only its runtime closure is recoverable.
-# The coordinator's own store is therefore the authoritative expansion; the builders only add the build-time paths behind the few that really were built remotely.
-
-: >"${work}/extra-expected.txt"
-if [[ -n "${EXTRA_PATHS_FILE}" && -s "${EXTRA_PATHS_FILE}" ]]; then
-  sort --unique "${EXTRA_PATHS_FILE}" >"${work}/extra-required.txt"
-  xargs -n 128 nix-store --check-validity --print-invalid \
-    <"${work}/extra-required.txt" >"${work}/extra-invalid.txt"
-  if [[ -s "${work}/extra-invalid.txt" ]]; then
-    cat "${work}/extra-invalid.txt" >&2
-    die "Not every extra realised output is valid in the coordinator store ($(wc -l <"${work}/extra-invalid.txt") missing)."
-  fi
-
-  expand_extra_on() {
-    local host remote=/tmp/reconcile-extra-paths.txt
-    host="$(builder_host "$1")"
-    ci_scp "${EXTRA_PATHS_FILE}" "${host}" "${remote}" || return 0
-    ci_ssh -t 600 -i "${host}" /usr/bin/env bash -s "${remote}" \
-      <"${here}/remote-expand-extra-paths.sh" >"${work}/extra-frag.$1" || true
-  }
-  for_each_builder expand_extra_on || true
-  cat "${work}"/extra-frag.* >"${work}/extra.fragments" 2>/dev/null || : >"${work}/extra.fragments"
-
-  # Not `|| true`: a short closure here silently drops live paths from the keep-set, which prunes them out of Attic.
-  xargs -n 128 nix-store --query --requisites <"${work}/extra-required.txt" \
-    >"${work}/extra-closure.txt" ||
-    die 'Could not expand the extra output closure in the coordinator store.'
-  awk -F'\t' '$1 == "PATH" {print $2}' "${work}/extra.fragments" >>"${work}/extra-closure.txt"
-  sort --unique "${work}/extra-closure.txt" >"${work}/extra-expected.txt"
-
-  awk -F'\t' '$1 == "FOUND" {print $2}' "${work}/extra.fragments" | sort --unique >"${work}/extra-found.txt"
-  notice "Extra outputs: $(wc -l <"${work}/extra-required.txt") realised, $(wc -l <"${work}/extra-found.txt") still have a deriver on a live builder; retention closure is $(wc -l <"${work}/extra-expected.txt") paths."
-fi
-
 # ── wait for the drainers, then snapshot Attic ──
 # One round trip per builder per round, all builders in parallel: the old two-per-builder serial poll cost more than the drain it was watching.
 
@@ -153,10 +118,8 @@ sort --unique -o "${work}/attic-paths.txt" "${work}/attic-paths.txt"
 : >"${work}/public.txt"
 [[ -s "${PUBLIC_PATHS_FILE}" ]] && sort --unique "${PUBLIC_PATHS_FILE}" >"${work}/public.txt"
 
-cat "${work}/retained-outputs.txt" "${work}/extra-expected.txt" |
-  sort --unique >"${work}/expected.all.txt"
-cat "${work}/active-outputs.txt" "${work}/extra-expected.txt" |
-  sort --unique >"${work}/required.all.txt"
+sort --unique "${work}/retained-outputs.txt" >"${work}/expected.all.txt"
+sort --unique "${work}/active-outputs.txt" >"${work}/required.all.txt"
 
 comm -23 "${work}/expected.all.txt" "${work}/public.txt" >"${work}/expected.txt"
 comm -23 "${work}/required.all.txt" "${work}/public.txt" >"${work}/required.txt"

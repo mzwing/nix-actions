@@ -8,40 +8,19 @@ Shared GitHub composite actions for [nur-packages](https://github.com/mzwing/nur
     cachix-name: mzwing
 ```
 
-## Actions
-
-| Action | Runs on | Purpose |
-| --- | --- | --- |
-| `nix/setup` | anywhere | Install Nix with the shared substituters, optionally Cachix and devenv |
-| `nix/restore-store` | anywhere | Restore the store from Actions Cache and clear stale lock files |
-| `nix/gc-store` | anywhere | Root the current lock's build closure, collect the rest |
-| `tailnet/join` | anywhere | Join the CI tailnet (and repair macOS DNS afterwards) |
-| `tailnet/pin-peer` | macOS | Pin a peer in `/etc/hosts` where MagicDNS is unavailable |
-| `builders/attach` | coordinator | Claim the fleet and register it with the local Nix daemon |
-| `builders/serve` | builder | Stay alive while the coordinator drives builds over ssh-ng |
-| `builders/release` | coordinator | Signal the fleet that the run is over |
-| `store-cache/prepare-dirs` | cache host | Create the Attic subtree and move the runner temp dir into the big pool |
-| `store-cache/start` | cache host | Bring up this run's Attic server |
-| `store-cache/adopt-checkpoint` | cache host | Promote a restored checkpoint over the restored finalized generation |
-| `store-cache/connect` | builder, coordinator | Point a machine at the Attic cache |
-| `store-cache/verify` | coordinator | Fail fast unless Attic answers from both sides |
-| `store-cache/checkpoint` | cache host | Stage a mid-run snapshot for saving |
-| `store-cache/signal-checkpoint` | coordinator | Ask the cache host for a mid-run snapshot |
-| `store-cache/reclaim-quota` | cache host | Clear the cache family so the next save fits in the 10 GiB repo quota |
-| `store-cache/reconcile` | coordinator | Upload whatever the post-build hook missed, then fix the retention set |
-| `store-cache/finalize` | cache host | Prune, verify and quiesce the generation for persisting |
-| `cachix/push` | coordinator | Realise a closure locally and push it to Cachix |
-| `git/commit-and-push` | anywhere | Commit as github-actions[bot] and optionally trigger a workflow |
+`.github/workflows/distributed-build.yml` is the whole build pipeline as a reusable workflow; nix-config and nur-packages each call it in about thirty lines.
 
 ## Layout
 
-Every action is a directory with `action.yml` plus the scripts it runs — no inline shell in YAML, so everything is covered by shellcheck and ruff.
+Every action is a directory with `action.yml` — which documents its own inputs — plus the scripts it runs. No inline shell in YAML, so everything is covered by shellcheck and ruff.
 
 ```
 lib/ci.sh                  logging, input validation, hardened ssh, bounded waits
 lib/caches.sh              the public binary caches, defined once
+lib/pins.sh                the nixpkgs revision attic and rclone come from
 lib/probe-public-paths.py  narinfo filter shared by reconcile and finalize
 store-cache/attic-state.sh state the store-cache actions hand across steps
+store-cache/rclone.sh      rclone bootstrap shared by pull and push
 ```
 
 Scripts source the library relative to their own location:

@@ -13,7 +13,7 @@ inputs:
     default: builder
 
   data-dir:
-    description: Directory persisted by GitHub Actions Cache.
+    description: Live Attic data directory, the one store-cache/persist writes out.
     required: false
     default: /nix/attic-data
 
@@ -21,11 +21,6 @@ inputs:
     description: Attic HTTP port on the tailnet.
     required: false
     default: '8080'
-
-  attic-nixpkgs-rev:
-    description: Pinned nixpkgs revision providing prebuilt Attic tools.
-    required: false
-    default: 2fcb964de67fcf60b43471c55d5d99e61a9ccb5a
 
 runs:
   using: composite
@@ -38,5 +33,4 @@ runs:
         CACHE_NAME: ${{ inputs.cache-name }}
         DATA_DIR: ${{ inputs.data-dir }}
         PORT: ${{ inputs.port }}
-        ATTIC_NIXPKGS_REV: ${{ inputs.attic-nixpkgs-rev }}
       run: bash ${{ github.action_path }}/start.sh

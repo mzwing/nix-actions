@@ -9,7 +9,7 @@ outputs:
 
 inputs:
   data-dir:
-    description: Directory persisted by GitHub Actions Cache.
+    description: Live Attic data directory, the one store-cache/persist writes out.
     required: false
     default: /nix/attic-data
 
@@ -20,7 +20,7 @@ inputs:
 
   deadline-minutes:
     description: >-
-      How long to wait for the coordinator. Must fit inside the job's own timeout with room for the save that follows.
+      How long to wait for the coordinator. Must fit inside the job's own timeout with room for the persist that follows.
     required: false
     default: '90'
 

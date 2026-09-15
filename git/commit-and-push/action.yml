@@ -22,32 +22,14 @@ inputs:
     required: false
     default: ''
 
-outputs:
-  changed:
-    description: Whether a commit was created ("true"/"false").
-    value: ${{ steps.commit.outputs.changed }}
-
 runs:
   using: composite
   steps:
-    - name: Commit changes
-      id: commit
+    - name: Commit and push changes
       shell: bash
       env:
         PATHS: ${{ inputs.paths }}
         MESSAGE: ${{ inputs.message }}
-      run: bash ${{ github.action_path }}/commit.sh
-
-    - name: Push changes
-      if: steps.commit.outputs.changed == 'true'
-      uses: ad-m/github-push-action@master
-      with:
-        branch: ${{ github.ref }}
-
-    - name: Trigger workflow
-      if: steps.commit.outputs.changed == 'true' && inputs.trigger-workflow != ''
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.github-token }}
         TRIGGER_WORKFLOW: ${{ inputs.trigger-workflow }}
-      run: gh workflow run "${TRIGGER_WORKFLOW}" --ref "${GITHUB_REF}"
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: bash ${{ github.action_path }}/commit.sh

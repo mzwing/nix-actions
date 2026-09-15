@@ -15,16 +15,6 @@ inputs:
     required: false
     default: all
 
-  extra-substituters:
-    description: Additional substituters (space-separated), appended to the shared list.
-    required: false
-    default: ''
-
-  extra-trusted-public-keys:
-    description: Additional trusted public keys (space-separated), appended to the shared list.
-    required: false
-    default: ''
-
   max-jobs:
     description: >-
       Value for the max-jobs nix setting (e.g. "0" on coordinators). Leave empty to skip.
@@ -42,7 +32,7 @@ inputs:
     default: 'true'
 
   install-devenv:
-    description: Whether to install devenv into the nix profile.
+    description: Whether to install devenv into the nix profile, trusting its cache.
     required: false
     default: 'false'
 
@@ -54,10 +44,9 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN_INPUT: ${{ inputs.github-token }}
-        EXTRA_SUBSTITUTERS: ${{ inputs.extra-substituters }}
-        EXTRA_TRUSTED_PUBLIC_KEYS: ${{ inputs.extra-trusted-public-keys }}
         MAX_JOBS: ${{ inputs.max-jobs }}
         SUBSTITUTER_SET: ${{ inputs.substituter-set }}
+        INSTALL_DEVENV: ${{ inputs.install-devenv }}
       run: bash ${{ github.action_path }}/assemble-nix-config.sh
 
     - name: Install Nix

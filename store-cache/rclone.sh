@@ -1,6 +1,9 @@
 # shellcheck shell=bash
-# Shared rclone bootstrap for store-cache/pull and store-cache/push.
+# Shared rclone bootstrap for store-cache/restore and store-cache/persist.
 # Sourced, never executed.
+
+# shellcheck source=lib/pins.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/pins.sh"
 
 # The config arrives base64-encoded in a secret so the token survives GitHub's line-based masking intact.
 # It lands in RUNNER_TEMP at mode 600 and is never echoed; rclone rewrites this file when it refreshes an OAuth token, and that rewrite is discarded with the runner, so the secret has to be reissued whenever the provider rotates the refresh token.
@@ -17,7 +20,7 @@ rclone_setup() {
 
   # Prebuilt for this Linux host; max-jobs=0 turns a missing substitute into a failure rather than a local Go build.
   local rclone_path
-  rclone_path="$(nix eval --raw "github:NixOS/nixpkgs/${RCLONE_NIXPKGS_REV}#rclone.outPath")"
+  rclone_path="$(nix eval --raw "github:NixOS/nixpkgs/${CI_NIXPKGS_REV}#rclone.outPath")"
   nix-store --realise --option max-jobs 0 "${rclone_path}" >/dev/null
   _rclone_bin="${rclone_path}/bin/rclone"
 

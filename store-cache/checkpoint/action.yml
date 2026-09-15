@@ -4,7 +4,7 @@ description: >-
 
 outputs:
   checkpoint-ready:
-    description: Whether a new snapshot was staged for saving.
+    description: Whether a new snapshot was staged for persisting.
     value: ${{ steps.stage.outputs.checkpoint-ready }}
 
 inputs:

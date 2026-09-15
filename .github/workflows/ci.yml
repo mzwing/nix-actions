@@ -19,9 +19,33 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: nix-actions
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          path: nix-actions
+
+      # check-consumers resolves these as siblings of the checkout above. Without them a rename here only surfaces in the consumer that breaks.
+      - name: Checkout gomod2nix
+        uses: actions/checkout@v7
+        with:
+          repository: mzwing/gomod2nix
+          path: gomod2nix
+
+      - name: Checkout nur-packages
+        uses: actions/checkout@v7
+        with:
+          repository: mzwing/nur-packages
+          path: nur-packages
+
+      - name: Checkout nix-config
+        uses: actions/checkout@v7
+        with:
+          repository: mzwing/nix-config
+          path: nix-config
 
       # Not nix/setup: that action lives here, and bootstrapping the linters through the thing being linted would make a broken commit unfixable. The two steps below are what it would have done, inlined.
       - name: Install Nix
@@ -39,3 +63,6 @@ jobs:
 
       - name: Lint
         run: devenv shell -- just lint
+
+      - name: Check consumers
+        run: devenv shell -- just check-consumers

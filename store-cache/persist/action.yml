@@ -1,0 +1,87 @@
+name: Persist builder store cache
+description: >-
+  Write the Attic generation out, to an rclone remote when one is given and to the GitHub Actions cache otherwise. See store-cache/restore for why a repository picks one backend over the other.
+
+inputs:
+  stage:
+    description: >-
+      "checkpoint" persists the staged mid-run snapshot and can only add; "final" persists the live directory after shutdown pruning and mirrors deletions.
+    required: true
+
+  remote:
+    description: 'rclone destination, e.g. onedrive:nix-ci/attic. Empty selects the Actions cache.'
+    required: false
+    default: ''
+
+  data-dir:
+    description: Live Attic data directory.
+    required: false
+    default: /nix/attic-data
+
+  checkpoint-dir:
+    description: Directory holding the staged mid-run snapshot.
+    required: false
+    default: /nix/attic-checkpoint
+
+  key-prefix:
+    description: Actions cache key family, as in store-cache/restore.
+    required: false
+    default: nix-builder-attic
+
+  github-token:
+    description: >-
+      Token for clearing the Actions cache family before a save; the calling job needs `actions: write`.
+    required: false
+    default: ''
+
+  max-delete:
+    description: >-
+      Abort the prune rather than delete more than this many objects. Guards against a half-restored local tree mirroring itself over a good remote.
+    required: false
+    default: '20000'
+
+  transfers:
+    description: Concurrent object transfers.
+    required: false
+    default: '24'
+
+  timeout-minutes:
+    description: Cap on an rclone push.
+    required: false
+    default: '60'
+
+runs:
+  using: composite
+  steps:
+    - name: Reclaim Actions cache quota
+      if: inputs.remote == ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        KEY_PREFIX: ${{ inputs.stage == 'checkpoint' && format('{0}chk', inputs.key-prefix) || inputs.key-prefix }}
+      run: bash ${{ github.action_path }}/reclaim-quota.sh
+
+    - name: Save generation to the Actions cache
+      if: inputs.remote == ''
+      uses: nix-community/cache-nix-action/save@v7
+      with:
+        primary-key: ${{ inputs.stage == 'checkpoint' && format('{0}chk', inputs.key-prefix) || inputs.key-prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
+        nix: false
+        paths: ${{ inputs.stage == 'checkpoint' && inputs.checkpoint-dir || inputs.data-dir }}
+        purge: true
+        # A finalized generation supersedes every checkpoint it was built from, so it clears both families — which the bare prefix, without the separating dash, already covers.
+        purge-prefixes: ${{ inputs.stage == 'checkpoint' && format('{0}chk-', inputs.key-prefix) || inputs.key-prefix }}
+        purge-last-accessed: 0
+        purge-primary-key: never
+
+    - name: Push generation to the remote
+      if: inputs.remote != ''
+      shell: bash
+      env:
+        REMOTE: ${{ inputs.remote }}
+        DATA_DIR: ${{ inputs.stage == 'checkpoint' && inputs.checkpoint-dir || inputs.data-dir }}
+        PRUNE: ${{ inputs.stage == 'final' }}
+        MAX_DELETE: ${{ inputs.max-delete }}
+        RCLONE_TRANSFERS: ${{ inputs.transfers }}
+        RCLONE_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+      run: bash ${{ github.action_path }}/push.sh

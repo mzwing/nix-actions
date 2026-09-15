@@ -7,10 +7,6 @@ outputs:
     description: JSON array of targets not found in any probed cache.
     value: ${{ steps.plan.outputs.targets }}
 
-  extra_systems:
-    description: JSON array of systems whose extra-outputs group needs rebuilding.
-    value: ${{ steps.plan.outputs.extra_systems }}
-
   builders:
     description: '{"include": [...]} matrix for the builder job.'
     value: ${{ steps.plan.outputs.builders }}
@@ -23,17 +19,6 @@ inputs:
   targets:
     description: 'Every candidate target as JSON: [{name, system, drvPath, outputPath, outputName?}].'
     required: true
-
-  extra-outputs:
-    description: >-
-      An optional second group of outputs rebuilt per system as a unit, given as {system: [outputPath]}. A system appears in `extra_systems` when any of its paths is missing. devenv shells are the motivating case: they have no static derivation to schedule, only realised outputs to check.
-    required: false
-    default: '{}'
-
-  extra-name:
-    description: Label for the extra group in log output.
-    required: false
-    default: extra
 
   primary-output:
     description: >-
@@ -60,8 +45,6 @@ runs:
       shell: bash
       env:
         ALL_TARGETS: ${{ inputs.targets }}
-        EXTRA_OUTPUTS: ${{ inputs.extra-outputs }}
-        EXTRA_NAME: ${{ inputs.extra-name }}
         PRIMARY_OUTPUT: ${{ inputs.primary-output }}
         BUILDERS_FILE: ${{ inputs.builders-file }}
         PROBE_CACHES: ${{ inputs.probe-caches }}

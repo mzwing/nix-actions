@@ -15,7 +15,6 @@ install -d "${DATA_DIR}/storage"
 # A first run, or one after the remote was cleared, simply starts cold.
 if ! ci_rclone lsf --max-depth 1 "${REMOTE}" >/dev/null 2>&1; then
   warn "No generation at ${REMOTE} yet; starting from an empty cache."
-  emit_output pulled false
   exit 0
 fi
 
@@ -32,4 +31,3 @@ else
 fi
 
 notice "Pulled generation: $(du -sh "${DATA_DIR}" | cut -f1) across $(find "${DATA_DIR}/storage" -type f | wc -l) objects."
-emit_output pulled true
