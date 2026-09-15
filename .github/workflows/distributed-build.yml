@@ -306,10 +306,12 @@ jobs:
           retention-days: 14
 
       # devenv publishes its own shells through its Cachix push daemon, so nothing here has to schedule or reconcile them.
+      # It does still need the matrix: nothing builds locally here, so the script can only cover systems the fleet has a builder for.
       - name: Build root devenv
         if: ${{ inputs.devenv && !cancelled() }}
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          BUILDERS_JSON: ${{ needs.config.outputs.builders }}
         run: bash scripts/ci/build-devenv.sh
 
       # Runs on red builds too: --keep-going means the build steps still realise the targets that succeeded.
