@@ -1,6 +1,6 @@
 name: Set up Nix
 description: >-
-  Install Nix with the shared substituter configuration, optionally configure Cachix for pulls and install devenv.
+  Install Nix with the shared substituter configuration plus the repository's own, optionally configure Cachix for pulls and install devenv.
 
 inputs:
   github-token:
@@ -9,9 +9,15 @@ inputs:
     required: false
     default: ''
 
+  caches:
+    description: >-
+      The repository's own binary caches, as plan-builds' `caches` output. Always trusted, substituted from unless substituter-set is "essential", and exported to the job's later steps so the store-cache pruning counts them as public.
+    required: false
+    default: ''
+
   substituter-set:
     description: >-
-      Which shared substituters to configure. "essential" keeps only the caches that realistically serve a build, so a cache miss costs one narinfo round trip instead of five — worth it on builders, where a cold Rust graph misses thousands of times.
+      Which substituters to configure. "essential" leaves out the repository's caches, sparing every cache miss a narinfo round trip per repository cache — worth it on builders, where a cold Rust graph misses thousands of times.
     required: false
     default: all
 
@@ -44,6 +50,7 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN_INPUT: ${{ inputs.github-token }}
+        CACHES: ${{ inputs.caches }}
         MAX_JOBS: ${{ inputs.max-jobs }}
         SUBSTITUTER_SET: ${{ inputs.substituter-set }}
         INSTALL_DEVENV: ${{ inputs.install-devenv }}

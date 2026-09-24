@@ -54,7 +54,7 @@ required_helpers=(
   notice warn fail die emit_output group endgroup
   require_positive_int require_non_negative_int require_port require_file require_signing_key
   ci_ssh ci_scp ci_wait_until ci_wait_all builder_ids
-  ci_build_substituters ci_build_trusted_keys ci_devenv_substituters ci_devenv_trusted_keys ci_public_cache_urls ci_public_cache_key_names
+  ci_load_repo_caches ci_build_substituters ci_build_trusted_keys ci_devenv_substituters ci_devenv_trusted_keys ci_public_cache_urls ci_public_cache_key_names
   attic_schema_matches attic_object_count attic_running attic_assert_consistent attic_prune_by_path_list
   rclone_setup ci_rclone
 )

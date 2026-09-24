@@ -3,7 +3,7 @@
 
 Probes the binary caches for every candidate target, keeps the ones nobody can
 fetch yet, and starts every configured builder in each active system's pool.
-Invoked through plan-builds.sh, which supplies PROBE_CACHES.
+Invoked through plan-builds.sh, which supplies PROBE_CACHES and REPO_CACHES.
 
 Writes `targets`, `builders` and `has_builds` to GITHUB_OUTPUT.
 """
@@ -49,8 +49,8 @@ def narinfo_status(store_path: str, cache: str) -> bool | None:
         return None
 
 
-def is_cached(store_path: str, caches: list[str]) -> bool:
-    # Only a definitive 404 from every cache means missing. Cachix intermittently
+def is_cached(store_path: str, caches: list[str], repo_caches: list[str]) -> bool:
+    # Only a definitive 404 from every shared cache means missing. Cachix intermittently
     # 403/429s HEAD bursts from runner IPs; treating that as "missing" schedules
     # thousands of already-cached derivations for a full rebuild. Retry, and if a
     # probe stays inconclusive assume cached: a wrong "cached" merely defers the
@@ -67,7 +67,8 @@ def is_cached(store_path: str, caches: list[str]) -> bool:
                 unknown = True
                 break
         if not unknown:
-            return False
+            # Only ever a source of hits: a repository cache that is down must not pass a target off as cached.
+            return any(narinfo_status(store_path, c) is True for c in repo_caches)
     print(f"probe inconclusive, assuming cached: {store_path}", file=sys.stderr)
     return True
 
@@ -105,6 +106,7 @@ def main() -> None:
     primary_output = os.environ["PRIMARY_OUTPUT"]
     pools = load_builder_pools(Path(os.environ["BUILDERS_FILE"]))
     caches = os.environ["PROBE_CACHES"].split()
+    repo_caches = [c for c in os.environ["REPO_CACHES"].split() if c not in caches]
 
     # Target sets that distinguish outputs are planned on the primary one only.
     candidates = [
@@ -113,7 +115,7 @@ def main() -> None:
         if target.get("outputName", primary_output) == primary_output
     ]
 
-    probe = partial(is_cached, caches=caches)
+    probe = partial(is_cached, caches=caches, repo_caches=repo_caches)
     with ThreadPoolExecutor() as executor:
         hits = executor.map(probe, (t["outputPath"] for t in candidates))
         targets = [t for t, hit in zip(candidates, hits, strict=True) if not hit]

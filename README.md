@@ -16,7 +16,7 @@ Every action is a directory with `action.yml` — which documents its own inputs
 
 ```
 lib/ci.sh                  logging, input validation, hardened ssh, bounded waits
-lib/caches.sh              the public binary caches, defined once
+lib/caches.sh              the shared binary caches; a repository adds its own in ci/caches.nix
 lib/pins.sh                the nixpkgs revision attic and rclone come from
 lib/probe-public-paths.py  narinfo filter shared by reconcile and finalize
 store-cache/attic-state.sh state the store-cache actions hand across steps

@@ -1,8 +1,12 @@
 name: Plan distributed builds
 description: >-
-  Decide what still needs building. Probes the binary caches for every target's output path, drops the ones already published, and starts every configured builder in each active system's pool.
+  Decide what still needs building. Probes the shared binary caches and the repository's own for every target's output path, drops the ones already published, and starts every configured builder in each active system's pool.
 
 outputs:
+  caches:
+    description: The repository's caches as JSON, for nix/setup's `caches` input.
+    value: ${{ steps.plan.outputs.caches }}
+
   targets:
     description: JSON array of targets not found in any probed cache.
     value: ${{ steps.plan.outputs.targets }}
@@ -31,11 +35,11 @@ inputs:
     required: false
     default: .github/builders.json
 
-  probe-caches:
+  caches-file:
     description: >-
-      Space-separated caches to probe. Empty uses the shared essential set, which is the question that matters: could a user fetch this without us rebuilding it?
+      Nix file evaluating to the repository's own binary caches, {substituters, trustedPublicKeys}. Missing means the shared caches only.
     required: false
-    default: ''
+    default: ci/caches.nix
 
 runs:
   using: composite
@@ -47,5 +51,5 @@ runs:
         ALL_TARGETS: ${{ inputs.targets }}
         PRIMARY_OUTPUT: ${{ inputs.primary-output }}
         BUILDERS_FILE: ${{ inputs.builders-file }}
-        PROBE_CACHES: ${{ inputs.probe-caches }}
+        CACHES_FILE: ${{ inputs.caches-file }}
       run: bash ${{ github.action_path }}/plan-builds.sh

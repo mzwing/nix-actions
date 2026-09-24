@@ -61,6 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       builders: ${{ steps.plan.outputs.builders }}
+      caches: ${{ steps.plan.outputs.caches }}
       has_builds: ${{ steps.plan.outputs.has_builds }}
       targets: ${{ steps.plan.outputs.targets }}
     steps:
@@ -105,6 +106,7 @@ jobs:
         uses: mzwing/nix-actions/nix/setup@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          caches: ${{ needs.config.outputs.caches }}
           # A cache miss costs one narinfo round trip per substituter, and a cold Rust graph misses thousands of times.
           substituter-set: essential
 
@@ -165,6 +167,7 @@ jobs:
         uses: mzwing/nix-actions/nix/setup@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          caches: ${{ needs.config.outputs.caches }}
           # Never compile packages on the cache runner.
           max-jobs: '0'
 
@@ -244,6 +247,7 @@ jobs:
         uses: mzwing/nix-actions/nix/setup@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          caches: ${{ needs.config.outputs.caches }}
           max-jobs: '0'
           install-devenv: ${{ inputs.devenv }}
 

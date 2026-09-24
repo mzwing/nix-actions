@@ -8,6 +8,12 @@
 [[ -z "${MAX_JOBS}" ]] || require_non_negative_int max-jobs "${MAX_JOBS}"
 [[ "${SUBSTITUTER_SET}" =~ ^(all|essential)$ ]] || die "substituter-set must be all or essential, got '${SUBSTITUTER_SET}'."
 
+# The store-cache steps later in the job read them back through lib/caches.sh.
+if [[ -n "${CACHES}" ]]; then
+  ci_load_repo_caches "${CACHES}"
+  printf 'CI_REPO_SUBSTITUTERS=%s\nCI_REPO_TRUSTED_KEYS=%s\n' "${CI_REPO_SUBSTITUTERS}" "${CI_REPO_TRUSTED_KEYS}" >>"${GITHUB_ENV}"
+fi
+
 substituters="$(ci_build_substituters "${SUBSTITUTER_SET}")"
 trusted_keys="$(ci_build_trusted_keys)"
 
