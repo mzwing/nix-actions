@@ -51,16 +51,8 @@ run_build() {
 
 # Drop builders that stopped answering ssh, recording them in lost_builders.
 # Returns 0 when at least one was dropped.
-#
-# Nix reschedules a build onto another machine only while dispatching; once a
-# build is running it cannot tell whether a dead connection means the far side
-# is still working, so every derivation in flight on a machine that dies is
-# marked failed and that failure cascades up the dependency graph. Evicting the
-# corpse is what makes a second pass worth running -- and probing, rather than
-# grepping the log, is what tells a dead machine apart from a genuinely broken
-# package: `cannot build on ...` also appears when nix simply falls through to
-# the next machine, and the lines that mark the real event (`Broken pipe`,
-# `Nix daemon disconnected unexpectedly`) name no host.
+# Nix reschedules a build onto another machine only while dispatching, so a machine that dies fails every derivation in flight on it and the failure cascades up the dependency graph.
+# Probing is what names the dead machine: `cannot build on ...` also appears when nix simply falls through to the next machine, and the lines that mark the real event name no host.
 evict_lost_builders() {
   local line host
   local kept=()
@@ -91,12 +83,31 @@ evict_lost_builders() {
   done < <(jq -r '.[]' <<<"${build_systems}")
 }
 
+# Whether a builder link dropped mid-build, which the probe cannot see once that builder is back.
+# A drop while an output is being copied home is swallowed by build-remote under --keep-going, and nix then aborts the whole pass with `some outputs are unexpectedly invalid`.
+# Build output always carries its derivation's name as a prefix, so only nix itself prints these lines.
+builder_link_dropped() {
+  awk '!/^[^ ]+> / && /Broken pipe|Nix daemon disconnected unexpectedly|some outputs are unexpectedly invalid/ { found = 1; exit } END { exit !found }' "${BUILD_LOG}"
+}
+
+retry_build() {
+  if [[ ! -s "${MACHINES_FILE}" ]]; then
+    warn 'No builders survived, so there is nothing left to retry on.'
+    return
+  fi
+  notice 'Retrying the build once; everything already realised is a no-op.'
+  printf '\nRetried the build once.\n' >>"${GITHUB_STEP_SUMMARY}"
+  build_status=0
+  run_build || build_status=$?
+}
+
 printf '### Built outputs\n\n' >>"${GITHUB_STEP_SUMMARY}"
 
 build_status=0
 run_build || build_status=$?
 
 # A timeout is a budget problem, not a connectivity one, so it is never retried.
+# Nor is a failure with every link intact: that is a broken package, and building it again would only fail the same way.
 if ((build_status != 0 && build_status != 124 && build_status != 137)) && [[ -s "${MACHINES_FILE}" ]]; then
   if evict_lost_builders; then
     {
@@ -107,15 +118,10 @@ if ((build_status != 0 && build_status != 124 && build_status != 137)) && [[ -s 
       done
     } >>"${GITHUB_STEP_SUMMARY}"
     warn "Lost ${#lost_builders[@]} builder(s) mid-build: ${lost_builders[*]}"
-
-    if [[ -s "${MACHINES_FILE}" ]]; then
-      notice 'Retrying the build once without them; everything already realised is a no-op.'
-      printf '\nRetried the build once without them.\n' >>"${GITHUB_STEP_SUMMARY}"
-      build_status=0
-      run_build || build_status=$?
-    else
-      warn 'No builders survived, so there is nothing left to retry on.'
-    fi
+    retry_build
+  elif builder_link_dropped; then
+    warn 'A builder link dropped mid-build, though every builder answers again.'
+    retry_build
   fi
 fi
 

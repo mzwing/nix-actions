@@ -1,6 +1,6 @@
 name: Build scheduled targets
 description: >-
-  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact. A builder that dies mid-build takes every derivation in flight on it down with it, so on failure the fleet is probed and the build runs once more without whoever stopped answering.
+  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact. A builder link that drops mid-build takes every derivation in flight on it down with it, so when the fleet probe finds a dead machine or the log shows a dropped link, the build runs once more without whoever stopped answering.
 
 inputs:
   targets:
@@ -20,7 +20,7 @@ inputs:
 
   builder-probe-seconds:
     description: >-
-      Bound on the liveness probe sent to each builder after a failed build. Only a machine that fails to answer within it is treated as lost and evicted before the retry, which is what keeps a genuinely broken package from being built twice.
+      Bound on the liveness probe sent to each builder after a failed build. A machine that fails to answer within it is treated as lost and evicted before the retry.
     required: false
     default: '30'
 
