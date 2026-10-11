@@ -12,12 +12,32 @@ require_positive_int transfer-jobs "${TRANSFER_JOBS}"
 require_positive_int transfer-timeout-minutes "${TRANSFER_TIMEOUT_MINUTES}"
 require_file 'the active derivation file' "${ACTIVE_DRVS_FILE}"
 
+# Written by nix/build-targets; absent means it ran without a fleet, in which case nobody can be lost.
+: "${LOST_BUILDERS_FILE:=/tmp/lost-builders.txt}"
+
 export LC_ALL=C
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
 mapfile -t builder_id_list < <(builder_ids "${BUILDERS_JSON}")
 builder_host() { printf '%s-%s' "${BUILDER_PREFIX}" "$1"; }
+
+# Ids the build already gave up on. build-targets records full hostnames; strip the prefix to compare ids.
+lost_builder_ids=()
+if [[ -s "${LOST_BUILDERS_FILE}" ]]; then
+  while IFS= read -r _host; do
+    [[ -n "${_host}" ]] || continue
+    lost_builder_ids+=("${_host#"${BUILDER_PREFIX}"-}")
+  done <"${LOST_BUILDERS_FILE}"
+  warn "Ignoring upload failures from lost builders: ${lost_builder_ids[*]}"
+fi
+is_lost_builder() {
+  local id="$1" lost
+  for lost in "${lost_builder_ids[@]}"; do
+    [[ "${lost}" == "${id}" ]] && return 0
+  done
+  return 1
+}
 
 for_each_builder() {
   local pids=() id
@@ -46,7 +66,7 @@ query_drv_outputs() {
 # ── flush the builders' upload spools ──
 # The drain runs while evaluation proceeds below; no new builds arrive after this point, so anything landing late is simply re-offered by the probe.
 
-request_drain() { ci_ssh "$(builder_host "$1")" 'touch /tmp/attic-drain-request' || true; }
+request_drain() { is_lost_builder "$1" || ci_ssh "$(builder_host "$1")" 'touch /tmp/attic-drain-request' || true; }
 for_each_builder request_drain || true
 notice 'Signalled all Attic drainers to flush and exit.'
 
@@ -96,6 +116,7 @@ drained() {
   for_each_builder poll_drain || true
   local id state backlog=''
   for id in "${builder_id_list[@]}"; do
+    is_lost_builder "${id}" && continue
     state="$(cat "${work}/drain.${id}" 2>/dev/null || true)"
     [[ "${state}" == 'done' ]] || backlog+="${id}=${state} "
   done
@@ -148,6 +169,10 @@ upload_from() {
   local id="$1" host remote=/tmp/reconcile-wanted-paths.txt
   host="$(builder_host "${id}")"
   : >"${work}/event.${id}"
+  if is_lost_builder "${id}"; then
+    notice "Skipping ${host}: the build already marked it lost."
+    return 0
+  fi
   if ! ci_scp "${work}/wanted.txt" "${host}" "${remote}"; then
     warn "Could not send the wanted path set to ${host}."
     touch "${work}/pipeline-failed.${id}"

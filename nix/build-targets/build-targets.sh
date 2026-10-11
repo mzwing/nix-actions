@@ -7,6 +7,9 @@ require_positive_int timeout-minutes "${BUILD_TIMEOUT_MINUTES}"
 require_positive_int max-silent-seconds "${MAX_SILENT_SECONDS}"
 require_positive_int builder-probe-seconds "${BUILDER_PROBE_SECONDS}"
 
+# Reconcile reads this regardless of how the build went, so it must exist even when nobody was lost.
+: >"${LOST_BUILDERS_FILE}"
+
 # Written by builders/attach; absent when the caller builds without a fleet.
 MACHINES_FILE=/etc/nix/machines
 
@@ -110,6 +113,9 @@ run_build || build_status=$?
 # Nor is a failure with every link intact: that is a broken package, and building it again would only fail the same way.
 if ((build_status != 0 && build_status != 124 && build_status != 137)) && [[ -s "${MACHINES_FILE}" ]]; then
   if evict_lost_builders; then
+    # Reconcile reads this to tell a dead machine apart from an upload failure: a lost builder holds whatever it
+    # built in a store the probe can no longer reach, so its silence must not count as an upload failure.
+    printf '%s\n' "${lost_builders[@]}" >"${LOST_BUILDERS_FILE}"
     {
       printf '\n### Builders lost mid-build\n\n'
       for host in "${lost_builders[@]}"; do

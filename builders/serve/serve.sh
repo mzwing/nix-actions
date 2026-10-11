@@ -14,10 +14,15 @@ notice "Builds here fail after ${MAX_SILENT_SECONDS}s of silence."
 
 claimed() { [[ -e /tmp/builder_claimed ]]; }
 
-# The heartbeat is the only sign of life in this job's log, since Nix drives the builds from the coordinator.
 released() {
   [[ -e /tmp/builder_done ]] && return 0
   notice "Serving... ($((SECONDS / 60))m)"
+  # Everything upstream watches the coordinator's view of us, so a builder whose tailscaled dies mid-run would
+  # otherwise keep heartbeating for hours while billing a macOS minute every minute. A bare exit-code check misses
+  # the "daemon alive but off the tailnet" case (stopped daemon still answers exit 0); only BackendState "Running"
+  # means we are actually connected.
+  [[ "$(sudo tailscale status --json 2>/dev/null | jq -r .BackendState)" == 'Running' ]] ||
+    die 'Lost the tailnet link; exiting so the coordinator stops waiting on us.'
   return 1
 }
 

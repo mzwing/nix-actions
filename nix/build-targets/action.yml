@@ -45,6 +45,12 @@ inputs:
     required: false
     default: /tmp/failed-targets.txt
 
+  lost-builders-file:
+    description: >-
+      File to write the builder ids evicted as lost mid-build to (one per line, empty when none). Reconcile reads it to tell a dead machine apart from an upload failure.
+    required: false
+    default: /tmp/lost-builders.txt
+
 runs:
   using: composite
   steps:
@@ -59,4 +65,5 @@ runs:
         BUILD_LOG: ${{ inputs.build-log }}
         BUILT_OUTPUTS_FILE: ${{ inputs.built-outputs-file }}
         FAILED_TARGETS_FILE: ${{ inputs.failed-targets-file }}
+        LOST_BUILDERS_FILE: ${{ inputs.lost-builders-file }}
       run: bash ${{ github.action_path }}/build-targets.sh
