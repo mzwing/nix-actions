@@ -17,11 +17,8 @@ claimed() { [[ -e /tmp/builder_claimed ]]; }
 released() {
   [[ -e /tmp/builder_done ]] && return 0
   notice "Serving... ($((SECONDS / 60))m)"
-  # Everything upstream watches the coordinator's view of us, so a builder whose tailscaled dies mid-run would
-  # otherwise keep heartbeating for hours while billing a macOS minute every minute. A bare exit-code check misses
-  # the "daemon alive but off the tailnet" case (stopped daemon still answers exit 0); only BackendState "Running"
-  # means we are actually connected.
-  [[ "$(sudo tailscale status --json 2>/dev/null | jq -r .BackendState)" == 'Running' ]] ||
+  # Local status can succeed while stopped; require a running backend without hiding CLI errors.
+  [[ "$(sudo tailscale status --json | jq -r .BackendState)" == 'Running' ]] ||
     die 'Lost the tailnet link; exiting so the coordinator stops waiting on us.'
   return 1
 }

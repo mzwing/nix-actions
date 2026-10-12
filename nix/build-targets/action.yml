@@ -1,6 +1,6 @@
 name: Build scheduled targets
 description: >-
-  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact. A builder link that drops mid-build takes every derivation in flight on it down with it, so when the fleet probe finds a dead machine or the log shows a dropped link, the build runs once more without whoever stopped answering.
+  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact. A builder link that drops mid-build takes every derivation in flight on it down with it, so the fleet is probed while the build runs, a machine that stops answering is evicted at once, and the build reruns without it for as long as builders and budget remain; a dropped link whose builder answers again gets one rerun.
 
 inputs:
   targets:
@@ -14,13 +14,13 @@ inputs:
 
   timeout-minutes:
     description: >-
-      Self-imposed budget for the whole step, retry included. Must stay well under the runner's 6-hour limit: hitting that limit cancels the job, and cancellation skips every `if: !cancelled()` step after this one, so the push and reconciliation vanish and the run publishes nothing.
+      Self-imposed budget for the whole step, retries included. Must stay well under the runner's 6-hour limit: hitting that limit cancels the job, and cancellation skips every `if: !cancelled()` step after this one, so the push and reconciliation vanish and the run publishes nothing.
     required: false
     default: '200'
 
   builder-probe-seconds:
     description: >-
-      Bound on the liveness probe sent to each builder after a failed build. A machine that fails to answer within it is treated as lost and evicted before the retry.
+      Bound on each builder liveness probe, and the pause between probe rounds while a pass runs. A machine that fails to answer within it is treated as lost and evicted.
     required: false
     default: '30'
 
@@ -47,7 +47,7 @@ inputs:
 
   lost-builders-file:
     description: >-
-      File to write the builder ids evicted as lost mid-build to (one per line, empty when none). Reconcile reads it to tell a dead machine apart from an upload failure.
+      File containing the full hostnames evicted as lost through the final build pass (one per line, empty when none). Pass the same path to store-cache/reconcile.
     required: false
     default: /tmp/lost-builders.txt
 

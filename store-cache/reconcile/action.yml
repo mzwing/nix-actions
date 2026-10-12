@@ -41,6 +41,11 @@ inputs:
     required: false
     default: /tmp/push-outputs.txt
 
+  lost-builders-file:
+    description: Full hostnames evicted by nix/build-targets; these builders are excluded from drain and upload probes. An absent or empty file means no recorded losses.
+    required: false
+    default: /tmp/lost-builders.txt
+
   transfer-jobs:
     description: Concurrent Attic uploads per builder.
     required: false
@@ -65,6 +70,7 @@ runs:
         DRVS_FILE: ${{ inputs.drvs-file }}
         ACTIVE_DRVS_FILE: ${{ inputs.active-drvs-file }}
         PUBLIC_PATHS_FILE: ${{ inputs.public-paths-file }}
+        LOST_BUILDERS_FILE: ${{ inputs.lost-builders-file }}
         TRANSFER_JOBS: ${{ inputs.transfer-jobs }}
         TRANSFER_TIMEOUT_MINUTES: ${{ inputs.transfer-timeout-minutes }}
       run: bash ${{ github.action_path }}/reconcile.sh

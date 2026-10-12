@@ -135,6 +135,15 @@ jobs:
       - name: Wait for distributed builds
         uses: mzwing/nix-actions/builders/serve@master
 
+      - name: Upload Tailscale daemon log
+        if: '!cancelled()'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tailscaled-${{ matrix.id }}
+          path: ~/tailscaled.log
+          if-no-files-found: warn
+          retention-days: 14
+
   # Central sparse Attic cache for the builders: narinfos may reference public-cache paths without persisting them, so only private NARs are stored.
   # Reconciliation installs the current-lock keep-set; shutdown prunes stale objects deterministically.
   cache:

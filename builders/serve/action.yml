@@ -1,6 +1,6 @@
 name: Serve distributed builds
 description: >-
-  Builder side: wait to be claimed by the coordinator, then idle until it signals completion. The builder itself does nothing — Nix drives it over ssh-ng — so this step only keeps the runner alive.
+  Wait to be claimed by the coordinator, then stay alive until released. Check the local Tailscale backend at each heartbeat and fail if it stops running; build outcomes are reported separately by the coordinator.
 
 inputs:
   claim-timeout-seconds:

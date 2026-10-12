@@ -22,13 +22,19 @@ build_systems="$(jq -c '[.[].system] | unique' <<<"${TARGETS}")"
 # this one, so the push and the reconciliation vanish and the run publishes nothing.
 deadline=$((SECONDS + BUILD_TIMEOUT_MINUTES * 60))
 
-lost_builders=()
-
 # Realise every scheduled target, streaming the out-paths to the step summary and
 # the full log to the artifact file. Returns nix's own status.
 run_build() {
-  local budget=$((deadline - SECONDS)) status=0
+  local budget=$((deadline - SECONDS)) status=0 watcher=''
   ((budget > 0)) || return 124
+
+  pass_log_line=$(($(wc -l <"${BUILD_LOG}") + 1))
+  pass_lost_count=$(wc -l <"${LOST_BUILDERS_FILE}")
+  # Every build-remote hook still listing a dead machine spends a full ssh connect timeout on it while nix waits synchronously, freezing the whole build: run 38134424160 lost 157 of its 207 build minutes that way.
+  if [[ -s "${MACHINES_FILE}" ]]; then
+    ci_wait_until "${budget}" "${BUILDER_PROBE_SECONDS}" 'the build pass to end' evict_round &
+    watcher=$!
+  fi
 
   set +e
   BUILD_SYSTEMS="${build_systems}" timeout --signal=INT --kill-after=5m "${budget}s" \
@@ -49,16 +55,22 @@ run_build() {
     done >>"${GITHUB_STEP_SUMMARY}"
   status=$?
   set -e
+
+  if [[ -n "${watcher}" ]]; then
+    kill "${watcher}" 2>/dev/null || true
+    wait "${watcher}" 2>/dev/null || true
+    # A machine can die after the watcher's last round, and both the retry decision and reconciliation need the final fleet.
+    evict_lost_builders
+  fi
   return "${status}"
 }
 
-# Drop builders that stopped answering ssh, recording them in lost_builders.
-# Returns 0 when at least one was dropped.
+# Drop builders that stopped answering ssh, appending them to the lost-builders file.
 # Nix reschedules a build onto another machine only while dispatching, so a machine that dies fails every derivation in flight on it and the failure cascades up the dependency graph.
 # Probing is what names the dead machine: `cannot build on ...` also appears when nix simply falls through to the next machine, and the lines that mark the real event name no host.
 evict_lost_builders() {
   local line host
-  local kept=()
+  local kept=() lost=()
 
   while IFS= read -r line; do
     [[ -n "${line}" ]] || continue
@@ -67,17 +79,21 @@ evict_lost_builders() {
     if ci_ssh -t "${BUILDER_PROBE_SECONDS}" "${host}" true >/dev/null 2>&1; then
       kept+=("${line}")
     else
-      lost_builders+=("${host}")
+      lost+=("${host}")
     fi
   done <"${MACHINES_FILE}"
 
-  ((${#lost_builders[@]} > 0)) || return 1
+  ((${#lost[@]} > 0)) || return 0
+  printf '%s\n' "${lost[@]}" >>"${LOST_BUILDERS_FILE}"
+  warn "Evicted ${#lost[@]} unreachable builder(s): ${lost[*]}"
 
+  # Build-remote hooks read this file as they start, and a pass may be running, so swap it in whole.
   if ((${#kept[@]} > 0)); then
-    printf '%s\n' "${kept[@]}" | sudo tee "${MACHINES_FILE}" >/dev/null
+    printf '%s\n' "${kept[@]}" | sudo tee "${MACHINES_FILE}.new" >/dev/null
   else
-    sudo tee "${MACHINES_FILE}" </dev/null
+    sudo tee "${MACHINES_FILE}.new" </dev/null
   fi
+  sudo mv "${MACHINES_FILE}.new" "${MACHINES_FILE}"
 
   local system
   while IFS= read -r system; do
@@ -86,22 +102,18 @@ evict_lost_builders() {
   done < <(jq -r '.[]' <<<"${build_systems}")
 }
 
-# Whether a builder link dropped mid-build, which the probe cannot see once that builder is back.
+# One round of the in-pass watcher; never returns 0, so ci_wait_until only supplies the loop and its deadline.
+# shellcheck disable=SC2329  # run_build hands it to ci_wait_until
+evict_round() {
+  evict_lost_builders
+  return 1
+}
+
+# Whether a builder link dropped during the last pass, which the probe cannot see once that builder is back.
 # A drop while an output is being copied home is swallowed by build-remote under --keep-going, and nix then aborts the whole pass with `some outputs are unexpectedly invalid`.
 # Build output always carries its derivation's name as a prefix, so only nix itself prints these lines.
 builder_link_dropped() {
-  awk '!/^[^ ]+> / && /Broken pipe|Nix daemon disconnected unexpectedly|some outputs are unexpectedly invalid/ { found = 1; exit } END { exit !found }' "${BUILD_LOG}"
-}
-
-retry_build() {
-  if [[ ! -s "${MACHINES_FILE}" ]]; then
-    warn 'No builders survived, so there is nothing left to retry on.'
-    return
-  fi
-  notice 'Retrying the build once; everything already realised is a no-op.'
-  printf '\nRetried the build once.\n' >>"${GITHUB_STEP_SUMMARY}"
-  build_status=0
-  run_build || build_status=$?
+  awk -v from="${pass_log_line}" 'NR >= from && !/^[^ ]+> / && /Broken pipe|Nix daemon disconnected unexpectedly|some outputs are unexpectedly invalid/ { found = 1; exit } END { exit !found }' "${BUILD_LOG}"
 }
 
 printf '### Built outputs\n\n' >>"${GITHUB_STEP_SUMMARY}"
@@ -110,25 +122,33 @@ build_status=0
 run_build || build_status=$?
 
 # A timeout is a budget problem, not a connectivity one, so it is never retried.
-# Nor is a failure with every link intact: that is a broken package, and building it again would only fail the same way.
-if ((build_status != 0 && build_status != 124 && build_status != 137)) && [[ -s "${MACHINES_FILE}" ]]; then
-  if evict_lost_builders; then
-    # Reconcile reads this to tell a dead machine apart from an upload failure: a lost builder holds whatever it
-    # built in a store the probe can no longer reach, so its silence must not count as an upload failure.
-    printf '%s\n' "${lost_builders[@]}" >"${LOST_BUILDERS_FILE}"
-    {
-      printf '\n### Builders lost mid-build\n\n'
-      for host in "${lost_builders[@]}"; do
-        # shellcheck disable=SC2016  # backticks are markdown for the step summary
-        printf -- '- `%s`\n' "${host}"
-      done
-    } >>"${GITHUB_STEP_SUMMARY}"
-    warn "Lost ${#lost_builders[@]} builder(s) mid-build: ${lost_builders[*]}"
-    retry_build
-  elif builder_link_dropped; then
+# Nor is a pass that lost no builder and dropped no link: that is a broken package, and building it again would only fail the same way.
+# A lost builder retries for as long as any survive, since each pass rebuilds only what the dead ones took down: run 38149666670 gave up after one retry with two darwin builders still alive.
+link_retries=1
+while ((build_status != 0 && build_status != 124 && build_status != 137)) && [[ -s "${MACHINES_FILE}" ]]; do
+  if (($(wc -l <"${LOST_BUILDERS_FILE}") == pass_lost_count)); then
+    if ((link_retries == 0)) || ! builder_link_dropped; then
+      break
+    fi
+    link_retries=0
     warn 'A builder link dropped mid-build, though every builder answers again.'
-    retry_build
   fi
+  notice 'Retrying the build; everything already realised is a no-op.'
+  printf '\nRetried the build.\n' >>"${GITHUB_STEP_SUMMARY}"
+  build_status=0
+  run_build || build_status=$?
+done
+
+if [[ -s "${LOST_BUILDERS_FILE}" ]]; then
+  sort --unique -o "${LOST_BUILDERS_FILE}" "${LOST_BUILDERS_FILE}"
+  {
+    printf '\n### Builders lost mid-build\n\n'
+    while IFS= read -r host; do
+      # shellcheck disable=SC2016  # backticks are markdown for the step summary
+      printf -- '- `%s`\n' "${host}"
+    done <"${LOST_BUILDERS_FILE}"
+  } >>"${GITHUB_STEP_SUMMARY}"
+  warn "Excluded $(wc -l <"${LOST_BUILDERS_FILE}") lost builder(s) from reconciliation: $(paste -sd' ' - <"${LOST_BUILDERS_FILE}")"
 fi
 
 if ((build_status == 124 || build_status == 137)); then

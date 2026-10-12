@@ -37,7 +37,9 @@ runs:
         tags: ${{ inputs.tags }}
         hostname: ${{ inputs.hostname }}
         args: ${{ inputs.args }}
-        version: latest
+        # On 1.104.1 tailscaled died mid-build on 6 of 8 darwin builders (runs 38134424160 and 38149666670), and not once in a month of darwin runs on 1.102.x.
+        # Unpin once the uploaded tailscaled log explains it.
+        version: 1.102.5
 
     - name: Restore macOS runner DNS
       if: runner.os == 'macOS'
