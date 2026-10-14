@@ -76,7 +76,8 @@ evict_lost_builders() {
     [[ -n "${line}" ]] || continue
     host="${line%% *}"
     host="${host##*@}"
-    if ci_ssh -t "${BUILDER_PROBE_SECONDS}" "${host}" true >/dev/null 2>&1; then
+    # One failed probe is no proof: run 38400088434 evicted a builder whose `true` had just completed on its side. ssh's stderr stays in the log so the next such failure explains itself.
+    if ci_wait_until "${BUILDER_PROBE_SECONDS}" 5 "builder ${host}" ci_ssh -t "${BUILDER_PROBE_SECONDS}" "${host}" true; then
       kept+=("${line}")
     else
       lost+=("${host}")
