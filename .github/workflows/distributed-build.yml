@@ -97,6 +97,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     # Must outlive the coordinator, but stay under the runner's 6h limit so post steps still run.
     timeout-minutes: 355
+    # A lost builder is evicted and its work rebuilt elsewhere, so the coordinator alone reports the build: run 39437185356 built every target, yet one macOS runner that GitHub lost turned it red and skipped every downstream job.
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.builders) }}
