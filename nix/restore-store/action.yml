@@ -56,4 +56,4 @@ runs:
 
     - name: Remove stale Nix store lock files
       shell: bash
-      run: sudo find /nix/store -maxdepth 1 -name '*.lock' -delete
+      run: bash ${{ github.action_path }}/remove-stale-locks.sh
