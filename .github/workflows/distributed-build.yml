@@ -173,6 +173,8 @@ jobs:
         uses: wimpysworld/nothing-but-nix@v10
         with:
           hatchet-protocol: cleave
+          # A background purge deletes /opt/hostedtoolcache while tailscale/github-action installs from it (run 43055381407)
+          witness-carnage: true
 
       - name: Set up Nix
         uses: mzwing/nix-actions/nix/setup@master
@@ -253,6 +255,8 @@ jobs:
         uses: wimpysworld/nothing-but-nix@v10
         with:
           hatchet-protocol: cleave
+          # A background purge deletes /opt/hostedtoolcache while tailscale/github-action installs from it (run 43055381407)
+          witness-carnage: true
 
       - name: Set up Nix
         uses: mzwing/nix-actions/nix/setup@master
