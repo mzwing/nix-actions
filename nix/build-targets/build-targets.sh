@@ -110,11 +110,12 @@ evict_round() {
   return 1
 }
 
-# Whether a builder link dropped during the last pass, which the probe cannot see once that builder is back.
+# Whether a builder or substituter link dropped during the last pass without costing a builder
 # A drop while an output is being copied home is swallowed by build-remote under --keep-going, and nix then aborts the whole pass with `some outputs are unexpectedly invalid`.
+# A substituter drop can fail its substitution outright: after the last byte, nix resumes with a range the cache cannot serve (run 44359548996)
 # Build output always carries its derivation's name as a prefix, so only nix itself prints these lines.
-builder_link_dropped() {
-  awk -v from="${pass_log_line}" 'NR >= from && !/^[^ ]+> / && /Broken pipe|Nix daemon disconnected unexpectedly|some outputs are unexpectedly invalid/ { found = 1; exit } END { exit !found }' "${BUILD_LOG}"
+link_dropped() {
+  awk -v from="${pass_log_line}" 'NR >= from && !/^[^ ]+> / && /Broken pipe|Nix daemon disconnected unexpectedly|some outputs are unexpectedly invalid|some substitutes for the outputs of derivation/ { found = 1; exit } END { exit !found }' "${BUILD_LOG}"
 }
 
 printf '### Built outputs\n\n' >>"${GITHUB_STEP_SUMMARY}"
@@ -128,11 +129,11 @@ run_build || build_status=$?
 link_retries=1
 while ((build_status != 0 && build_status != 124 && build_status != 137)) && [[ -s "${MACHINES_FILE}" ]]; do
   if (($(wc -l <"${LOST_BUILDERS_FILE}") == pass_lost_count)); then
-    if ((link_retries == 0)) || ! builder_link_dropped; then
+    if ((link_retries == 0)) || ! link_dropped; then
       break
     fi
     link_retries=0
-    warn 'A builder link dropped mid-build, though every builder answers again.'
+    warn 'A builder or substituter link dropped mid-build, though every builder answers again.'
   fi
   notice 'Retrying the build; everything already realised is a no-op.'
   printf '\nRetried the build.\n' >>"${GITHUB_STEP_SUMMARY}"

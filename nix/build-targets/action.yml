@@ -1,6 +1,6 @@
 name: Build scheduled targets
 description: >-
-  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact. A builder link that drops mid-build takes every derivation in flight on it down with it, so the fleet is probed while the build runs, a machine that stops answering is evicted at once, and the build reruns without it for as long as builders and budget remain; a dropped link whose builder answers again gets one rerun.
+  Drive the distributed build of every scheduled target, then report what came out and what did not. Writes the realised output paths and the failed target names to files for the steps that follow, and keeps a full build log for an artifact. A builder link that drops mid-build takes every derivation in flight on it down with it, so the fleet is probed while the build runs, a machine that stops answering is evicted at once, and the build reruns without it for as long as builders and budget remain; a dropped link whose builder answers again, or a substitution failed by a dropped download, gets one rerun.
 
 inputs:
   targets:
