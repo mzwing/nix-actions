@@ -31,5 +31,8 @@ fi
   [[ -z "${MAX_JOBS}" ]] || echo "max-jobs = ${MAX_JOBS}"
   echo "substituters = ${substituters}"
   echo "trusted-public-keys = ${trusted_keys}"
+  # Firn looks up every narinfo in D1, which answered an HTTP/2-multiplexed burst with 4300 "D1 DB is overloaded" 500s in 5 s, and nix aborts the build once one narinfo exhausts its retries (run 45505852126)
+  echo 'http2 = false'
+  echo 'download-attempts = 10'
   echo 'NIX_CONFIG_EOF'
 } >>"${GITHUB_OUTPUT}"
