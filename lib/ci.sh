@@ -31,11 +31,6 @@ require_non_negative_int() {
   [[ "$2" =~ ^(0|[1-9][0-9]*)$ ]] || die "$1 must be a non-negative integer, got '$2'."
 }
 
-require_port() {
-  require_positive_int "$1" "$2"
-  ((10#$2 <= 65535)) || die "$1 must be between 1 and 65535, got '$2'."
-}
-
 require_file() { [[ -e "$2" ]] || die "$1 does not exist: $2"; }
 
 require_signing_key() {
@@ -74,7 +69,7 @@ _ci_ssh_opts=(
 mkdir -p "${_ci_ssh_control_dir}"
 chmod 700 "${_ci_ssh_control_dir}"
 
-# GitHub's macOS runners ship no GNU timeout, and store-cache/connect calls ci_ssh there, so fall back to a watchdog rather than silently dropping the bound.
+# GitHub's macOS runners ship no GNU timeout, so fall back to a watchdog rather than silently dropping the bound.
 if command -v timeout >/dev/null 2>&1; then
   _ci_bounded() {
     local seconds="$1"
@@ -124,20 +119,6 @@ ci_ssh() {
   local host="$1"
   shift
   _ci_bounded "${command_timeout}" ssh "${stdin[@]}" "${_ci_ssh_opts[@]}" "root@${host}" "$@"
-}
-
-# ci_scp [-t SECONDS] LOCAL HOST REMOTE
-ci_scp() {
-  local command_timeout="${CI_SSH_TIMEOUT}" option
-  local OPTIND=1
-  while getopts ':t:' option; do
-    case "${option}" in
-      t) command_timeout="${OPTARG}" ;;
-      *) die "ci_scp: unknown option -${OPTARG}" ;;
-    esac
-  done
-  shift $((OPTIND - 1))
-  _ci_bounded "${command_timeout}" scp -q "${_ci_ssh_opts[@]}" "$1" "root@$2:$3"
 }
 
 # ── bounded waiting ──

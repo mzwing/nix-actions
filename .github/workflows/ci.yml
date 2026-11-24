@@ -51,13 +51,6 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 
-      # The devenv shell pulls NUR packages that only this cache has prebuilt; without it they are compiled from source and the job times out.
-      - name: Configure Cachix for pulls
-        uses: cachix/cachix-action@v17
-        with:
-          name: mzwing
-          skipPush: true
-
       - name: Install devenv
         run: nix profile add nixpkgs#devenv
 

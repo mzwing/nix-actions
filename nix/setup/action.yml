@@ -1,6 +1,6 @@
 name: Set up Nix
 description: >-
-  Install Nix with the shared substituter configuration plus the repository's own, optionally configure Cachix for pulls and install devenv.
+  Install Nix with shared and repository substituters, and optionally install devenv.
 
 inputs:
   github-token:
@@ -11,7 +11,7 @@ inputs:
 
   caches:
     description: >-
-      The repository's own binary caches, as plan-builds' `caches` output. Always trusted, substituted from unless substituter-set is "essential", and exported to the job's later steps so the store-cache pruning counts them as public.
+      The repository's own binary caches, as plan-builds' `caches` output. Always trusted, substituted from unless substituter-set is "essential", and exported so the uploader skips their signed paths.
     required: false
     default: ''
 
@@ -26,16 +26,6 @@ inputs:
       Value for the max-jobs nix setting (e.g. "0" on coordinators). Leave empty to skip.
     required: false
     default: ''
-
-  cachix-name:
-    description: Cachix cache name to configure for pulls.
-    required: false
-    default: mzwing
-
-  cachix-pull:
-    description: Whether to configure Cachix for pulls (skipPush).
-    required: false
-    default: 'true'
 
   install-devenv:
     description: Whether to install devenv into the nix profile, trusting its cache.
@@ -60,13 +50,6 @@ runs:
       uses: cachix/install-nix-action@v31
       with:
         extra_nix_config: ${{ steps.nix-config.outputs.extra_nix_config }}
-
-    - name: Configure Cachix for pulls
-      if: inputs.cachix-pull == 'true'
-      uses: cachix/cachix-action@v17
-      with:
-        name: ${{ inputs.cachix-name }}
-        skipPush: true
 
     - name: Install devenv
       if: inputs.install-devenv == 'true'

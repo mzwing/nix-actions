@@ -14,7 +14,7 @@ inputs:
 
   timeout-minutes:
     description: >-
-      Self-imposed budget for the whole step, retries included. Must stay well under the runner's 6-hour limit: hitting that limit cancels the job, and cancellation skips every `if: !cancelled()` step after this one, so the push and reconciliation vanish and the run publishes nothing.
+      Self-imposed budget for the whole step, retries included. Must stay well under the runner's 6-hour limit: hitting that limit cancels the job, and cancellation skips every `if: !cancelled()` step after this one, so the firn flush never runs.
     required: false
     default: '200'
 
@@ -45,12 +45,6 @@ inputs:
     required: false
     default: /tmp/failed-targets.txt
 
-  lost-builders-file:
-    description: >-
-      File containing the full hostnames evicted as lost through the final build pass (one per line, empty when none). Pass the same path to store-cache/reconcile.
-    required: false
-    default: /tmp/lost-builders.txt
-
 runs:
   using: composite
   steps:
@@ -65,5 +59,4 @@ runs:
         BUILD_LOG: ${{ inputs.build-log }}
         BUILT_OUTPUTS_FILE: ${{ inputs.built-outputs-file }}
         FAILED_TARGETS_FILE: ${{ inputs.failed-targets-file }}
-        LOST_BUILDERS_FILE: ${{ inputs.lost-builders-file }}
       run: bash ${{ github.action_path }}/build-targets.sh

@@ -52,19 +52,13 @@ done < <(find "${here}/.github/workflows" -name '*.yml')
 # Add a name here when the scripts start depending on it.
 required_helpers=(
   notice warn fail die emit_output group endgroup
-  require_positive_int require_non_negative_int require_port require_file require_signing_key
-  ci_ssh ci_scp ci_wait_until ci_wait_all builder_ids
-  ci_load_repo_caches ci_build_substituters ci_build_trusted_keys ci_devenv_substituters ci_devenv_trusted_keys ci_public_cache_urls ci_public_cache_key_names
-  attic_schema_matches attic_object_count attic_running attic_assert_consistent attic_prune_by_path_list
-  rclone_setup ci_rclone
+  require_positive_int require_non_negative_int require_file require_signing_key
+  ci_ssh ci_wait_until ci_wait_all builder_ids
+  ci_load_repo_caches ci_build_substituters ci_build_trusted_keys ci_devenv_substituters ci_devenv_trusted_keys ci_upstream_cache_key_names
 )
 missing="$(
   # shellcheck source=lib/caches.sh
   . "${here}/lib/caches.sh"
-  # shellcheck source=store-cache/attic-state.sh
-  . "${here}/store-cache/attic-state.sh"
-  # shellcheck source=store-cache/rclone.sh
-  . "${here}/store-cache/rclone.sh"
   for helper in "${required_helpers[@]}"; do
     declare -F "${helper}" >/dev/null || printf '%s ' "${helper}"
   done
@@ -74,10 +68,9 @@ if [[ -n "${missing}" ]]; then
   status=1
 fi
 
-# Pinned once in lib/pins.sh; four actions used to carry it as an input default, which is how they drifted.
 # shellcheck source=lib/pins.sh
-if ! (. "${here}/lib/pins.sh" && [[ -n "${CI_NIXPKGS_REV}" ]]); then
-  fail 'lib/pins.sh no longer defines CI_NIXPKGS_REV.'
+if ! (. "${here}/lib/pins.sh" && [[ -n "${CI_FIRN_REF}" ]]); then
+  fail 'lib/pins.sh no longer defines CI_FIRN_REF.'
   status=1
 fi
 

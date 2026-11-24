@@ -1,6 +1,6 @@
 name: Release remote builders
 description: >-
-  Signal every builder that the run is over, and optionally the store cache host too, so those jobs can shut down cleanly. Intended to run with `if: always()`.
+  Signal every builder that the run is over. Intended to run with `if: always()`.
 
 inputs:
   builders-json:
@@ -10,11 +10,6 @@ inputs:
   builder-prefix:
     description: Hostname prefix of the builders (e.g. nix-b-<run_id>-<attempt>).
     required: true
-
-  cache-host:
-    description: Optional store cache hostname; when set it is signalled too.
-    required: false
-    default: ''
 
   timeout-seconds:
     description: How long to keep retrying each best-effort signal.
@@ -29,6 +24,5 @@ runs:
       env:
         BUILDERS_JSON: ${{ inputs.builders-json }}
         BUILDER_PREFIX: ${{ inputs.builder-prefix }}
-        CACHE_HOST: ${{ inputs.cache-host }}
         TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
       run: bash ${{ github.action_path }}/release.sh

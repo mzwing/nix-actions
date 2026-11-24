@@ -24,7 +24,7 @@ from typing import Any
 
 HTTP_TIMEOUT_SECONDS = 15
 ID_PREFIX_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-# Cachix sits behind Cloudflare, which 403s urllib's default User-Agent.
+# Cloudflare rejects urllib's default User-Agent
 USER_AGENT = "nix-ci-plan-builds"
 
 
@@ -103,22 +103,14 @@ def load_builder_pools(path: Path) -> list[dict[str, Any]]:
 
 def main() -> None:
     all_targets: list[dict[str, Any]] = json.loads(os.environ["ALL_TARGETS"])
-    primary_output = os.environ["PRIMARY_OUTPUT"]
     pools = load_builder_pools(Path(os.environ["BUILDERS_FILE"]))
     caches = os.environ["PROBE_CACHES"].split()
     repo_caches = [c for c in os.environ["REPO_CACHES"].split() if c not in caches]
 
-    # Target sets that distinguish outputs are planned on the primary one only.
-    candidates = [
-        target
-        for target in all_targets
-        if target.get("outputName", primary_output) == primary_output
-    ]
-
     probe = partial(is_cached, caches=caches, repo_caches=repo_caches)
     with ThreadPoolExecutor() as executor:
-        hits = executor.map(probe, (t["outputPath"] for t in candidates))
-        targets = [t for t, hit in zip(candidates, hits, strict=True) if not hit]
+        hits = executor.map(probe, (t["outputPath"] for t in all_targets))
+        targets = [t for t, hit in zip(all_targets, hits, strict=True) if not hit]
 
     active_systems = sorted({t["system"] for t in targets})
     missing = [s for s in active_systems if s not in {p["system"] for p in pools}]

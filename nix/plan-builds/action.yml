@@ -24,12 +24,6 @@ inputs:
     description: 'Every candidate target as JSON: [{name, system, drvPath, outputPath, outputName?}].'
     required: true
 
-  primary-output:
-    description: >-
-      When targets carry an `outputName`, plan only this one. The others are realised by the same derivation build and reach the private store cache through the post-build hook, but are never published, so probing for them would schedule a perpetual no-op build.
-    required: false
-    default: out
-
   builders-file:
     description: Builder pool definitions.
     required: false
@@ -49,7 +43,6 @@ runs:
       shell: bash
       env:
         ALL_TARGETS: ${{ inputs.targets }}
-        PRIMARY_OUTPUT: ${{ inputs.primary-output }}
         BUILDERS_FILE: ${{ inputs.builders-file }}
         CACHES_FILE: ${{ inputs.caches-file }}
       run: bash ${{ github.action_path }}/plan-builds.sh

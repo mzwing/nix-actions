@@ -1,0 +1,19 @@
+name: Flush Firn uploader
+description: Upload queued paths and wait for completion.
+inputs:
+  paths-file:
+    description: File containing output paths to upload.
+    required: true
+  timeout-minutes:
+    description: Maximum time to wait for the uploader.
+    required: false
+    default: '60'
+runs:
+  using: composite
+  steps:
+    - name: Flush Firn uploader
+      shell: bash
+      env:
+        PATHS_FILE: ${{ inputs.paths-file }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+      run: bash ${{ github.action_path }}/flush.sh

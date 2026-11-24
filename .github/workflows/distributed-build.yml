@@ -1,30 +1,17 @@
 name: Distributed build
 
-# One pipeline for every repository that builds on the CI fleet. The four jobs below start together and meet over the tailnet:
-# the coordinator drives builds on the builders, the builders push intermediates into the cache host's Attic, and the cache
-# host persists that generation for the next run. Their only shared vocabulary is the env block and the /tmp files noted at
-# each step, so both are kept here rather than spread across the calling repositories.
-#
-# The caller supplies two scripts, which is how a repository says what it builds:
-#   scripts/ci/evaluate-targets.sh   writes `targets` to GITHUB_OUTPUT: [{name, system, drvPath, outputPath, outputName?}]
-#   scripts/ci/assemble-push-set.sh  reads /tmp/built-outputs.txt (written by nix/build-targets) and $TARGETS,
-#                                    writes /tmp/active-drvs.txt and /tmp/push-outputs.txt
+# The coordinator drives builds on the builders over the tailnet and uploads everything they build to firn through its post-build hook
+# The caller supplies scripts/ci/evaluate-targets.sh, which writes `targets` to GITHUB_OUTPUT: [{name, system, drvPath, outputPath, outputName?}]
+# The calling job must grant contents: read, id-token: write and packages: write
 
 on:
   workflow_call:
     inputs:
       name-prefix:
         description: >-
-          Short repository tag used for host names and tailnet ACL tags. Changing it breaks the ACL, which grants tag:<prefix>-ci-{builder,cache,coordinator} to the OAuth client.
+          Short repository tag used for host names and tailnet ACL tags. Changing it breaks the ACL, which grants tag:<prefix>-ci-{builder,coordinator} to the OAuth client.
         required: true
         type: string
-
-      store-cache-remote:
-        description: >-
-          rclone destination for the Attic generation. Empty persists through the GitHub Actions cache instead; see store-cache/restore for which backend a repository wants.
-        required: false
-        type: string
-        default: ''
 
       build-timeout-minutes:
         description: Cap on the build itself, leaving the rest of the coordinator's budget to publish.
@@ -43,22 +30,19 @@ on:
         required: true
       TS_OAUTH_SECRET:
         required: true
-      CACHIX_AUTH_TOKEN:
-        required: true
-      RCLONE_CONFIG:
-        required: false
 
 env:
   BUILDER_PREFIX: ${{ inputs.name-prefix }}-b-${{ github.run_id }}-${{ github.run_attempt }}
-  CACHE_HOST: ${{ inputs.name-prefix }}-cache-${{ github.run_id }}-${{ github.run_attempt }}
   COORD_HOST: ${{ inputs.name-prefix }}-c-${{ github.run_id }}-${{ github.run_attempt }}
   TAG_PREFIX: tag:${{ inputs.name-prefix }}-ci
-  SSH_HOST_PATTERN: ${{ inputs.name-prefix }}-b-* ${{ inputs.name-prefix }}-cache-*
+  SSH_HOST_PATTERN: ${{ inputs.name-prefix }}-b-*
 
 jobs:
   config:
     name: Plan builds
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       builders: ${{ steps.plan.outputs.builders }}
       caches: ${{ steps.plan.outputs.caches }}
@@ -99,11 +83,13 @@ jobs:
     timeout-minutes: 355
     # A lost builder is evicted and its work rebuilt elsewhere, so the coordinator alone reports the build: run 39437185356 built every target, yet one macOS runner that GitHub lost turned it red and skipped every downstream job.
     continue-on-error: true
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.builders) }}
     steps:
-      # No checkout: this job only serves ssh. Cachix is pull-only, because the coordinator pushes the final outputs and the write token stays off the unsandboxed macOS builders.
+      # No checkout: this job only serves ssh. Builders only pull, so no upload credential reaches the unsandboxed macOS builders
       - name: Set up Nix
         uses: mzwing/nix-actions/nix/setup@master
         with:
@@ -121,19 +107,6 @@ jobs:
           hostname: ${{ env.BUILDER_PREFIX }}-${{ matrix.id }}
           args: --ssh
 
-      # macOS only: accepting Tailscale DNS kills public internet, so the action resets to DHCP — which drops MagicDNS, hence the /etc/hosts pin. Linux builders use split DNS.
-      - name: Resolve builder store cache address
-        if: endsWith(matrix.system, '-darwin')
-        uses: mzwing/nix-actions/tailnet/pin-peer@master
-        with:
-          hostname: ${{ env.CACHE_HOST }}
-
-      # Fetch run-local Attic credentials only after joining the tailnet. The sparse post-build push excludes paths signed by public upstreams.
-      - name: Configure builder store cache
-        uses: mzwing/nix-actions/store-cache/connect@master
-        with:
-          cache-host: ${{ env.CACHE_HOST }}
-
       - name: Wait for distributed builds
         uses: mzwing/nix-actions/builders/serve@master
 
@@ -146,107 +119,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Central sparse Attic cache for the builders: narinfos may reference public-cache paths without persisting them, so only private NARs are stored.
-  # Reconciliation installs the current-lock keep-set; shutdown prunes stale objects deterministically.
-  cache:
-    name: Builder store cache
-    needs: config
-    if: needs.config.outputs.has_builds == 'true'
-    runs-on: ubuntu-latest
-    # 420 was silently capped at the runner's 6-hour maximum, which cancels the job and so skips the final persist — the run's whole point.
-    #
-    # The caps below bound pathology; they are not expected durations and deliberately do not sum to this budget, because the job banks snapshots until GitHub stops it.
-    #                        expected    cap   what the cap protects
-    #   setup -> Attic up          10     45   a stalled restore (store-cache/restore caps its pull at 35)
-    #   checkpoint wait       = coord    150   a coordinator that never signals
-    #   stage snapshot              3      -
-    #   mid-run persist             8     30   a stalled incremental push
-    #   finalize wait               0     90   a coordinator cancelled before /tmp/cache_done
-    #   prune + probe + gc         10      -
-    #   final persist              12     60   a stalled full push
-    timeout-minutes: 355
-    env:
-      RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG }}
-    steps:
-      # No checkout: every step here works on /nix/attic-data, never on repository files.
-      - name: Maximize Nix disk space
-        uses: wimpysworld/nothing-but-nix@v10
-        with:
-          hatchet-protocol: cleave
-          # A background purge deletes /opt/hostedtoolcache while tailscale/github-action installs from it (run 43055381407)
-          witness-carnage: true
-
-      - name: Set up Nix
-        uses: mzwing/nix-actions/nix/setup@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          caches: ${{ needs.config.outputs.caches }}
-          # Never compile packages on the cache runner.
-          max-jobs: '0'
-
-      # Join before the slow restore, so builders can resolve this host while it runs.
-      - name: Join cache network
-        uses: mzwing/nix-actions/tailnet/join@master
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: ${{ env.TAG_PREFIX }}-cache
-          hostname: ${{ env.CACHE_HOST }}
-          args: --ssh
-
-      - name: Prepare Attic data directory
-        uses: mzwing/nix-actions/store-cache/prepare-dirs@master
-
-      - name: Restore builder store cache
-        uses: mzwing/nix-actions/store-cache/restore@master
-        with:
-          remote: ${{ inputs.store-cache-remote }}
-
-      # Starts Attic in the background and returns. Client bootstrap (push-only token, rotated signing key) is published over Tailscale SSH.
-      - name: Start Attic
-        uses: mzwing/nix-actions/store-cache/start@master
-        with:
-          cache-host: ${{ env.CACHE_HOST }}
-
-      - name: Wait for checkpoint
-        id: checkpoint
-        uses: mzwing/nix-actions/store-cache/checkpoint@master
-        with:
-          timeout-minutes: '150'
-
-      # The staged snapshot, never the live directory: reconciliation keeps uploading into Attic for as long as this runs.
-      # Insurance only, so continue-on-error keeps a failure here from skipping the finalizing persist, which carries the run's actual result.
-      - name: Persist builder store cache (mid-run)
-        if: ${{ !cancelled() && steps.checkpoint.outputs.checkpoint-ready == 'true' }}
-        continue-on-error: true
-        uses: mzwing/nix-actions/store-cache/persist@master
-        with:
-          stage: checkpoint
-          remote: ${{ inputs.store-cache-remote }}
-          github-token: ${{ github.token }}
-
-      - name: Finalize Attic
-        id: attic
-        uses: mzwing/nix-actions/store-cache/finalize@master
-        with:
-          deadline-minutes: '90'
-
-      # Only after Attic shut down cleanly and passed its integrity checks.
-      - name: Persist builder store cache
-        if: ${{ !cancelled() && steps.attic.outputs.save-ready == 'true' }}
-        uses: mzwing/nix-actions/store-cache/persist@master
-        with:
-          stage: final
-          remote: ${{ inputs.store-cache-remote }}
-          github-token: ${{ github.token }}
-
   coordinator:
     name: Distributed build coordinator
     needs: config
     if: needs.config.outputs.has_builds == 'true'
     runs-on: ubuntu-latest
-    # Below the runner maximum, so the Cachix push and reconciliation still run instead of being cancelled with the job.
+    # Below the runner maximum, so the firn flush still runs instead of being cancelled with the job
     timeout-minutes: 350
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -274,13 +157,8 @@ jobs:
           tags: ${{ env.TAG_PREFIX }}-coordinator
           hostname: ${{ env.COORD_HOST }}
 
-      # The coordinator substitutes locally built runtime deps from the builder store cache when assembling the Cachix push closure.
-      # Runs before the nix-daemon restart in "Configure remote builders" so the daemon picks up the new substituter.
-      - name: Configure builder store cache substituter
-        uses: mzwing/nix-actions/store-cache/connect@master
-        with:
-          cache-host: ${{ env.CACHE_HOST }}
-          post-build-hook: 'false'
+      - name: Start firn uploader
+        uses: mzwing/nix-actions/firn/upload@master
 
       - name: Configure remote builders
         uses: mzwing/nix-actions/builders/attach@master
@@ -288,14 +166,6 @@ jobs:
           builders-json: ${{ needs.config.outputs.builders }}
           builder-prefix: ${{ env.BUILDER_PREFIX }}
           ssh-host-pattern: ${{ env.SSH_HOST_PATTERN }}
-
-      # The cache joins the tailnet in parallel, so check it is reachable — directly and through the first builder — before building starts.
-      - name: Check builder store cache reachability
-        uses: mzwing/nix-actions/store-cache/verify@master
-        with:
-          cache-host: ${{ env.CACHE_HOST }}
-          builders-json: ${{ needs.config.outputs.builders }}
-          builder-prefix: ${{ env.BUILDER_PREFIX }}
 
       # A builder that loses contact with GitHub never uploads its own log, so its last vitals have to be recorded from here.
       - name: Sample builder vitals
@@ -324,56 +194,24 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      # devenv publishes its own shells through its Cachix push daemon, so nothing here has to schedule or reconcile them.
+      # The firn post-build hook uploads whatever this builds
       # It does still need the matrix: nothing builds locally here, so the script can only cover systems the fleet has a builder for.
       - name: Build root devenv
         if: ${{ inputs.devenv && !cancelled() }}
         env:
-          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
           BUILDERS_JSON: ${{ needs.config.outputs.builders }}
         run: bash scripts/ci/build-devenv.sh
 
-      # Runs on red builds too: --keep-going means the build steps still realise the targets that succeeded.
-      - name: Assemble Cachix push set
-        if: '!cancelled()'
-        env:
-          TARGETS: ${{ needs.config.outputs.targets }}
-        run: bash scripts/ci/assemble-push-set.sh
-
-      - name: Push final outputs to Cachix
-        if: '!cancelled()'
-        uses: mzwing/nix-actions/cachix/push@master
-        env:
-          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
-        with:
-          cachix-name: mzwing
-          paths-file: /tmp/push-outputs.txt
-          closure-paths-file: /tmp/cachix-published-closure.txt
-
-      # Lets the cache job snapshot a consistent mid-run generation before reconciliation, so even a cancelled run leaves a warm cache.
-      - name: Signal builder store cache checkpoint
-        if: '!cancelled()'
-        uses: mzwing/nix-actions/store-cache/signal-checkpoint@master
-        with:
-          cache-host: ${{ env.CACHE_HOST }}
-
-      # Re-offer every output in the scheduled closures while builders are alive. Sparse no-closure uploads, six workers, same private expected set as the shutdown keep-list.
-      - name: Reconcile builder store cache
-        if: '!cancelled()'
-        uses: mzwing/nix-actions/store-cache/reconcile@master
-        with:
-          builders-json: ${{ needs.config.outputs.builders }}
-          builder-prefix: ${{ env.BUILDER_PREFIX }}
-          cache-host: ${{ env.CACHE_HOST }}
-          active-drvs-file: /tmp/active-drvs.txt
-          # Written atomically only after Cachix accepted the full closure.
-          public-paths-file: /tmp/cachix-published-closure.txt
-
-      # Also signals the cache machine that the run is over (/tmp/cache_done, via cache-host).
       - name: Release remote builders
         if: always()
         uses: mzwing/nix-actions/builders/release@master
         with:
           builders-json: ${{ needs.config.outputs.builders }}
           builder-prefix: ${{ env.BUILDER_PREFIX }}
-          cache-host: ${{ env.CACHE_HOST }}
+
+      # Runs on red builds too: --keep-going still realises the targets that succeeded, and re-offering them covers an enqueue the hook dropped
+      - name: Flush firn uploader
+        if: '!cancelled()'
+        uses: mzwing/nix-actions/firn/flush@master
+        with:
+          paths-file: /tmp/built-outputs.txt

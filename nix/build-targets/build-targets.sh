@@ -7,8 +7,8 @@ require_positive_int timeout-minutes "${BUILD_TIMEOUT_MINUTES}"
 require_positive_int max-silent-seconds "${MAX_SILENT_SECONDS}"
 require_positive_int builder-probe-seconds "${BUILDER_PROBE_SECONDS}"
 
-# Reconcile reads this regardless of how the build went, so it must exist even when nobody was lost.
-: >"${LOST_BUILDERS_FILE}"
+LOST_BUILDERS_FILE="$(mktemp)"
+trap 'rm -f "${LOST_BUILDERS_FILE}"' EXIT
 
 # Written by builders/attach; absent when the caller builds without a fleet.
 MACHINES_FILE=/etc/nix/machines
@@ -19,7 +19,7 @@ build_systems="$(jq -c '[.[].system] | unique' <<<"${TARGETS}")"
 # One deadline for the whole step, shared by every pass. Giving each pass its own
 # budget could add up past the runner's 6-hour limit, and hitting that limit
 # cancels the job -- which makes `if: !cancelled()` false for every step after
-# this one, so the push and the reconciliation vanish and the run publishes nothing.
+# this one, so the firn flush never runs
 deadline=$((SECONDS + BUILD_TIMEOUT_MINUTES * 60))
 
 # Realise every scheduled target, streaming the out-paths to the step summary and
@@ -59,7 +59,7 @@ run_build() {
   if [[ -n "${watcher}" ]]; then
     kill "${watcher}" 2>/dev/null || true
     wait "${watcher}" 2>/dev/null || true
-    # A machine can die after the watcher's last round, and both the retry decision and reconciliation need the final fleet.
+    # A machine can die after the watcher's last round, and the retry decision needs the final fleet.
     evict_lost_builders
   fi
   return "${status}"
@@ -150,14 +150,14 @@ if [[ -s "${LOST_BUILDERS_FILE}" ]]; then
       printf -- '- `%s`\n' "${host}"
     done <"${LOST_BUILDERS_FILE}"
   } >>"${GITHUB_STEP_SUMMARY}"
-  warn "Excluded $(wc -l <"${LOST_BUILDERS_FILE}") lost builder(s) from reconciliation: $(paste -sd' ' - <"${LOST_BUILDERS_FILE}")"
+  warn "Lost $(wc -l <"${LOST_BUILDERS_FILE}") builder(s): $(paste -sd' ' - <"${LOST_BUILDERS_FILE}")"
 fi
 
 if ((build_status == 124 || build_status == 137)); then
   fail "The distributed build exceeded its ${BUILD_TIMEOUT_MINUTES}-minute budget; publishing whatever finished."
 fi
 
-# `nix build` prints out-paths only when the whole invocation succeeds, so with --keep-going one failure would hide every other realised output from the push set. Re-derive them from the local store, and name the ones still missing — otherwise a failure is only findable by reading the whole build log.
+# `nix build` prints out-paths only when the whole invocation succeeds, so with --keep-going one failure would hide every other realised output from the flush. Re-derive them from the local store, and name the ones still missing — otherwise a failure is only findable by reading the whole build log.
 : >"${BUILT_OUTPUTS_FILE}"
 : >"${FAILED_TARGETS_FILE}"
 while IFS=$'\t' read -r name out; do

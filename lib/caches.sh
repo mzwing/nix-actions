@@ -2,12 +2,15 @@
 # The binary caches every repository gets. Each entry is `url<TAB>signing-key`, so key names can never drift from the keys.
 # A repository adds its own through plan-builds' caches-file; ci_load_repo_caches reads them, and nix/setup exports them to the rest of the job.
 
+CI_FIRN_SERVER=https://nix-cache.service.mzwing.eu.org
+CI_FIRN_KEY=nix-cache.service.mzwing.eu.org-1:ZI+74ziFu8O5j5jSAz45VTPo09uLYH7O8F2dBYBQYsk=
+
 _ci_build_caches=(
-  "https://mzwing.cachix.org	mzwing.cachix.org-1:tOO3NqAwrXyPCnecEl/0wXwparCRksM5TeuS/wZK+KA="
+  "${CI_FIRN_SERVER}	${CI_FIRN_KEY}"
   "https://cache.nixos.org	cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
 )
 
-# devenv's own cache. Only jobs that install devenv build against it, but it makes a path public either way, so pruning always counts it.
+# Only jobs that install devenv build against it, but its paths are never worth uploading either way
 _ci_devenv_caches=(
   "https://devenv.cachix.org	devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
 )
@@ -56,17 +59,10 @@ ci_devenv_substituters() { printf '%s\n' "${_ci_devenv_caches[@]}" | _ci_field 1
 
 ci_devenv_trusted_keys() { printf '%s\n' "${_ci_devenv_caches[@]}" | _ci_field 2 | paste -sd' ' -; }
 
-# Newline-separated, for the pruning passes: anything already public must not be stored privately.
-ci_public_cache_urls() {
-  {
-    printf '%s\n' "${_ci_build_caches[@]}" "${_ci_devenv_caches[@]}" | _ci_field 1
-    _ci_words "${CI_REPO_SUBSTITUTERS:-}"
-  } | _ci_unique
-}
-
-ci_public_cache_key_names() {
+# Signature prefixes for `firn push --skip-signed-by`: whatever another cache already serves is never uploaded
+ci_upstream_cache_key_names() {
   {
     printf '%s\n' "${_ci_build_caches[@]}" "${_ci_devenv_caches[@]}" | _ci_field 2
     _ci_words "${CI_REPO_TRUSTED_KEYS:-}"
-  } | cut -d: -f1 | _ci_unique
+  } | grep -vxF "${CI_FIRN_KEY}" | cut -d: -f1 | _ci_unique | sed 's/$/:/'
 }

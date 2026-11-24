@@ -4,7 +4,6 @@
     lsp.enable = true;
   };
 
-  # For the remote pipelines in store-cache/; stdlib only, so no uv/lockfile.
   languages.python.enable = true;
 
   packages = with pkgs; [

@@ -1,11 +1,9 @@
 # nix-actions
 
-Shared GitHub composite actions for [nur-packages](https://github.com/mzwing/nur-packages) and [nix-config](https://github.com/mzwing/nix-config): Nix setup, a Tailscale-connected distributed build fleet, and the ephemeral Attic cache that holds the fleet's private build intermediates.
+Shared GitHub composite actions for [nur-packages](https://github.com/mzwing/nur-packages) and [nix-config](https://github.com/mzwing/nix-config): Nix setup, a Tailscale-connected distributed build fleet, and uploading everything the fleet builds to the [firn](https://github.com/so1ve/firn) cache at <https://nix-cache.service.mzwing.eu.org>.
 
 ```yaml
 - uses: mzwing/nix-actions/nix/setup@master
-  with:
-    cachix-name: mzwing
 ```
 
 `.github/workflows/distributed-build.yml` is the whole build pipeline as a reusable workflow; nix-config and nur-packages each call it in about thirty lines.
@@ -17,10 +15,8 @@ Every action is a directory with `action.yml` — which documents its own inputs
 ```
 lib/ci.sh                  logging, input validation, hardened ssh, bounded waits
 lib/caches.sh              the shared binary caches; a repository adds its own in ci/caches.nix
-lib/pins.sh                the nixpkgs revision attic and rclone come from
-lib/probe-public-paths.py  narinfo filter shared by reconcile and finalize
-store-cache/attic-state.sh state the store-cache actions hand across steps
-store-cache/rclone.sh      rclone bootstrap shared by pull and push
+lib/pins.sh                the firn CLI pin
+firn/state.sh              paths shared by the firn uploader scripts
 ```
 
 Scripts source the library relative to their own location:
@@ -31,7 +27,7 @@ Scripts source the library relative to their own location:
 
 ## Two rules worth keeping
 
-**Every ssh goes through `ci_ssh`/`ci_scp`.** A CI tailnet link can black-hole instead of resetting, and ssh without liveness probes then blocks in `read()` forever. That is not a slow build, it is a dead one: Nix's worker reads the `build-remote` hook's verdict synchronously, and that hook connects to a machine before answering, so one wedged connection freezes *every* concurrent build until the job hits GitHub's six-hour limit. `builders/attach` writes the equivalent options into `/etc/ssh/ssh_config.d` for Nix's own ssh-ng connections, deliberately without the control-plane multiplexing, so a stuck control connection cannot take the fleet with it.
+**Every ssh goes through `ci_ssh`.** A CI tailnet link can black-hole instead of resetting, and ssh without liveness probes then blocks in `read()` forever. That is not a slow build, it is a dead one: Nix's worker reads the `build-remote` hook's verdict synchronously, and that hook connects to a machine before answering, so one wedged connection freezes *every* concurrent build until the job hits GitHub's six-hour limit. `builders/attach` writes the equivalent options into `/etc/ssh/ssh_config.d` for Nix's own ssh-ng connections, deliberately without the control-plane multiplexing, so a stuck control connection cannot take the fleet with it.
 
 **Every wait uses `ci_wait_until`.** It takes a deadline, so no loop in this repository can run forever by accident.
 
