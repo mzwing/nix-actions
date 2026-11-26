@@ -68,11 +68,5 @@ if [[ -n "${missing}" ]]; then
   status=1
 fi
 
-# shellcheck source=lib/pins.sh
-if ! (. "${here}/lib/pins.sh" && [[ -n "${CI_FIRN_REF}" ]]); then
-  fail 'lib/pins.sh no longer defines CI_FIRN_REF.'
-  status=1
-fi
-
 ((status == 0)) && notice 'All actions invoke their scripts through an interpreter, and every shared helper still exists.'
 exit "${status}"

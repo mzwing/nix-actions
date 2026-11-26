@@ -15,7 +15,6 @@ Every action is a directory with `action.yml` — which documents its own inputs
 ```
 lib/ci.sh                  logging, input validation, hardened ssh, bounded waits
 lib/caches.sh              the shared binary caches; a repository adds its own in ci/caches.nix
-lib/pins.sh                the firn CLI pin
 firn/state.sh              paths shared by the firn uploader scripts
 ```
 
