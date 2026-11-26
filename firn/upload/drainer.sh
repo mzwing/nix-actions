@@ -8,15 +8,10 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${here}/../state.sh"
 skip=()
 while IFS= read -r key; do skip+=(--skip-signed-by "${key}"); done < <(ci_upstream_cache_key_names)
-touch "${FIRN_SPOOL}"
+shopt -s nullglob
 while true; do
-  while ! mkdir "${FIRN_LOCK}" 2>/dev/null; do sleep 0.2; done
-  batch="$(mktemp /tmp/firn-batch.XXXXXX)"
-  cat "${FIRN_SPOOL}" >"${batch}"
-  : >"${FIRN_SPOOL}"
-  rmdir "${FIRN_LOCK}"
-  if [[ ! -s "${batch}" ]]; then
-    rm -f "${batch}"
+  entries=("${FIRN_SPOOL}"/[!.]*)
+  if ((${#entries[@]} == 0)); then
     if [[ -e "${FIRN_REQUEST}" ]]; then
       touch "${FIRN_DONE}"
       exit 0
@@ -24,7 +19,9 @@ while true; do
     sleep 2
     continue
   fi
-  sort -u -o "${batch}" "${batch}"
+  batch="$(mktemp /tmp/firn-batch.XXXXXX)"
+  cat "${entries[@]}" | sort -u >"${batch}"
+  rm -f "${entries[@]}"
   split -l 128 "${batch}" "${batch}.part."
   for part in "${batch}".part.*; do
     success=0
